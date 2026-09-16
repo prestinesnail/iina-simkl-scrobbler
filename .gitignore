@@ -1,0 +1,4 @@
+.DS_Store
+*.iinaplugin
+*.iinaplgz
+node_modules/

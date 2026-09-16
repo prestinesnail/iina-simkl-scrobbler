@@ -1,0 +1,195 @@
+# SIMKL Scrobbler for IINA
+
+An [IINA](https://iina.io) plugin that scrobbles movies, TV, and anime to [Simkl](https://simkl.com) in real time, with a now-playing overlay and IntroDB skip buttons.
+
+Requires **IINA 1.4.0** or later.
+
+![Now-playing overlay showing Simkl watch progress](docs/now-playing-overlay.jpg)
+
+The overlay shows the matched title, live progress, and time left. Episode chips match Simkl: **S01E01** for TV, **Ep. 9** for anime, nothing for movies. Click the card to open the title on Simkl. Hover anywhere in the player after it fades to bring it back.
+
+## Install
+
+In IINA, open **Settings → Plugins → Install from GitHub** and enter:
+
+```
+prestinesnail/iina-simkl-scrobbler
+```
+
+IINA installs from [github.com/prestinesnail/iina-simkl-scrobbler](https://github.com/prestinesnail/iina-simkl-scrobbler) and can check that repository for updates.
+
+For local development, symlink the plugin folder:
+
+```sh
+mkdir -p ~/Library/Application\ Support/com.colliderli.iina/plugins
+ln -sf "$(pwd)" ~/Library/Application\ Support/com.colliderli.iina/plugins/iina-simkl-scrobbler.iinaplugin-dev
+```
+
+Restart IINA. The plugin appears under **Settings → Plugins**. Quit IINA fully before replacing an existing install.
+
+## Setup
+
+1. Create a free Simkl app at [simkl.com/settings/developer/new](https://simkl.com/settings/developer/new/).
+2. Copy the **client ID**. Leave the client secret unused — this plugin uses PIN login, not a redirect URI.
+3. In IINA, open **Settings → Plugins → SIMKL Scrobbler → Settings** and paste the client ID.
+4. Click **Connect to Simkl**, or open the **SIMKL** sidebar (`⌘K`) and click **Connect**.
+5. Enter the 5-character PIN at [simkl.com/pin](https://simkl.com/pin/).
+
+The access token is stored in the macOS keychain. A plaintext copy is written to plugin preferences and the plugin data folder only if the keychain write fails; successful keychain storage deletes those copies. Tokens last until you revoke the app in [Simkl Connected Apps](https://simkl.com/settings/connected-apps/).
+
+![Plugin settings for client ID, overlay, skip intro, and Simkl connect](docs/plugin-settings.jpg)
+
+IINA will ask you to approve two “dangerous” permissions. They are required for scrobbling to work.
+
+## Permissions
+
+### Access the file system
+
+IINA groups disk access and `utils.exec` under this permission. The plugin uses it for:
+
+- **Plugin data folder (`@data`)** — match cache and a 30-minute “no match” cache so the same file is not re-identified every play. If the macOS keychain write fails, a fallback copy of the OAuth token is stored here and in plugin preferences; it is deleted when keychain storage succeeds.
+- **Plugin temp folder (`@tmp`)** — short-lived curl header and JSON body files (mode 0600) so the Bearer token is not passed on the process command line.
+- **`/usr/bin/curl`** — JSON POST bodies (scrobble, file search). IINA’s HTTP helper form-encodes objects, which Simkl rejects.
+- **`/bin/chmod`** — restrict those temp files to the current user.
+- **`osascript`** — copy the PIN code to the clipboard when you click Copy.
+
+The plugin does not scan your library. It only sees the path of the file IINA is already playing, and it never sends file contents—only a filename (and optionally `parent/filename`) to Simkl.
+
+### Network request
+
+Traffic is limited to the hosts in `Info.json` `allowedDomains`:
+
+| Host | Why |
+| --- | --- |
+| `api.simkl.com` | PIN login, file/title search, metadata, and `start` / `pause` / `stop` scrobbles |
+| `api.introdb.app` | Recap / intro / outro timestamps for Skip Intro |
+| `simkl.com` | PIN page (`/pin`) and “View on Simkl” / overlay click (https only) |
+| `simkl.in` | Official poster files |
+| `wsrv.nl` | Simkl-recommended image proxy: resize, cache, and `&q=90` for overlay and sidebar posters |
+
+Nothing else is contacted.
+
+The overlay and Skip Intro buttons also need **Video Overlay**. On-screen messages use **Show OSD**. Those are not in the red warning list.
+
+## How to use
+
+Play a movie or episode in IINA. The plugin identifies the file, sends Simkl `start` / `pause` / `stop` events as you watch, and draws the now-playing card on the video.
+
+| You do this | What happens |
+| --- | --- |
+| Play a matched file | Simkl **Now Watching** starts; overlay appears |
+| Pause | Simkl saves a resume point and pauses Now Watching |
+| Resume | Simkl starts again at the current progress; overlay shows briefly |
+| Scrub / skip | **No Simkl call.** Local progress updates; the next pause or stop carries it |
+| Stop, close the window, quit IINA, or play the next file | Simkl `stop` — watched if progress is **80% or higher** |
+| Let the file end (≥ 95%) | Simkl `stop` at 100% |
+| Hover the player after the overlay fades | Overlay peeks back in |
+| Click the overlay card | Opens the title on Simkl |
+| Skip Intro / Recap / Outro | Seeks to the end of that IntroDB segment |
+
+If the wrong title is matched, open the sidebar (`⌘K`) and use **Correct match**. **Mark as Watched** in the plugin menu sends `stop` at 100% for the current title.
+
+Simkl marks an item **watched** only on `stop` with progress ≥ 80. Pausing at 90% saves a resume point; it does not complete the watch.
+
+Playback POSTs happen only on play, pause, stop, close, and natural end — never on a timer and never on seek. Simkl interpolates **Watching now** progress from the item runtime between those events. That is required by [Simkl’s scrobble guide](https://api.simkl.org/guides/scrobble.md).
+
+## How a video is identified
+
+The plugin never hashes the file. It identifies from the **path and filename** IINA is playing.
+
+1. **Filename** — taken from the local path or `file://` URL. For some stream URLs, a `#/` filename hint is used instead of the CDN path. Scene tags (`[BluRay-1080p]`, `{imdb-tt…}`, `-GROUP`) are stripped before matching.
+2. **External IDs** — `{imdb-tt0126029}`, `{tmdb-…}`, and `{tvdb-…}` in the file or parent folder are looked up with `GET /search/id`. This is the usual Plex/Radarr movie folder layout.
+3. **Cache** — a trusted previous match for that file is reused. Failed matches are remembered for 30 minutes so a missing title is not re-queried every play. Network errors are not cached as “no match.”
+4. **Simkl file search** — `POST /search/file` with a cleaned `Title (Year).mkv`, then the raw basename and parent folder. Folder prefixes from your home directory are not sent.
+5. **Trust check** — the result must have a real catalog title and a Simkl ID. Garbage titles (`.`, empty, punctuation-only) are ignored.
+6. **Metadata** — `GET /movies/{id}`, `/tv/{id}`, or `/anime/{id}` fills English/romaji titles, year, poster, and extra IDs.
+7. **Title-search fallback** — if file search fails, the plugin parses a title (and year / `SxxExx`) from the filename or parent folder and searches Simkl’s catalog. Short tokens such as “One” or “Love” are not trusted as the first catalog hit. A match is kept only when the normalized titles are exact, or word overlap is high **and** the year matches.
+8. **Manual override** — **Correct match** in the sidebar searches movies, TV, and anime and stores your choice.
+
+Episode numbers come from the filename (`S01E03`, `1x03`, anime `E01`) when Simkl returns a show without an episode. Movies use the `movie` wrapper. Regular TV uses `show` plus `episode.season` / `episode.number`. Anime uses the `anime` wrapper: MAL / AniDB / AniList-style IDs send a flat episode number; IMDb / TMDB / TVDB IDs also send season so Simkl can map cours.
+
+For sequel seasons that Simkl stores as season 1 of a new series, the overlay can show the filename season (for example `S02E06`) while the scrobble still uses Simkl’s season/episode IDs.
+
+## IntroDB
+
+Skip buttons come from [IntroDB](https://introdb.app), not Simkl.
+
+After a file is matched, the plugin reads the **IMDb ID** on that Simkl record and requests recap, intro, and outro timestamps:
+
+```
+GET https://api.introdb.app/segments?imdb_id=tt…&season=…&episode=…
+```
+
+Season and episode are the numbers shown on the overlay (filename season when that differs from Simkl’s sequel numbering). Movies and matches without an IMDb ID skip this step.
+
+When playback enters a segment (with a 1.5s lead-in), a **Skip Recap**, **Skip Intro**, or **Skip Outro** button appears. It fades after 5 seconds and stays clickable until that segment ends. Clicking seeks to the segment’s end. Turn this off with **Show Skip Intro / Recap / Outro buttons** in plugin settings. It also needs the Video Overlay permission.
+
+## APIs and hosts
+
+The plugin only talks to hosts listed in `Info.json` `allowedDomains`.
+
+### Simkl — `https://api.simkl.com`
+
+| Call | When |
+| --- | --- |
+| `GET /oauth/pin` | Start PIN login |
+| `GET /oauth/pin/{code}` | Poll until you authorize |
+| `POST /users/settings` | Load the connected account |
+| `POST /search/file` | Identify the playing file |
+| `GET /search/id` | Resolve `{imdb-tt…}` / `{tmdb-…}` / `{tvdb-…}` tags in the path |
+| `GET /search/movie`, `/search/tv`, `/search/anime` | Title-search fallback and Correct match |
+| `GET /movies/{id}`, `/tv/{id}`, `/anime/{id}` | Titles, poster, year, extra IDs |
+| `POST /scrobble/start` | Play or resume |
+| `POST /scrobble/pause` | Pause (resume point) |
+| `POST /scrobble/stop` | Stop, close, quit, or finished |
+
+Every request includes your public `client_id`, `app-name`, and `app-version`. Scrobble and account calls send `Authorization: Bearer` from the keychain. JSON POST bodies go through curl so they are sent as JSON (IINA’s HTTP helper form-encodes objects).
+
+The plugin maps IINA/mpv events onto those scrobble calls. It does **not** poll Simkl for progress.
+
+### IntroDB — `https://api.introdb.app`
+
+| Call | When |
+| --- | --- |
+| `GET /segments` | Recap / intro / outro times for the matched IMDb episode |
+
+### Images and pages
+
+| Host | Use |
+| --- | --- |
+| `https://simkl.in` | Official poster art |
+| `https://wsrv.nl` | Resize/proxy those posters (`_m` / `_c` + `&q=90`) for the overlay and sidebar |
+| `https://simkl.com` | PIN page, title pages, and “View on Simkl” (https only) |
+
+No other sites are contacted. The plugin does not send the file contents, only a filename (and optionally `parent/filename`) to Simkl.
+
+## Preferences
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| Simkl client ID | empty | Public app id from your Simkl developer settings |
+| Enable scrobbling | on | Master switch for Simkl POSTs |
+| Show scrobble status on overlay | on | Now Watching / Updating / Paused on the card |
+| OSD message length | 4 seconds | Remaining top-left OSD (Skip Intro confirmations, 1–15s) |
+| Show debug OSD | off | Extra identification messages |
+| Show titles in | English | English or original/romaji in the sidebar and overlay |
+| Show now-playing overlay | on | Poster card when a title starts |
+| Overlay display length | 8 seconds | How long the card stays fully visible at start (1–30) |
+| Overlay length after resume | 2 seconds | Hide delay after unpause unless the pointer is over the player (1–30) |
+| Show Skip Intro / Recap / Outro | on | IntroDB skip buttons |
+| Track rewatches | off | On `stop` ≥ 80% of an already-finished title, log a separate viewing. Simkl Pro / VIP only. Never sent on play or pause |
+| Pause debounce | 400 ms | Ignore brief pauses from seeking (0–5000) |
+
+Changes apply while the player window is open.
+
+## Plugin menu
+
+- **Show SIMKL Sidebar** — `⌘K`
+- **Connect to Simkl**
+- **Toggle Scrobbling**
+- **Mark as Watched** — `stop` at 100% for the current title
+- **Preview Now Playing Overlay** / **Preview Skip Intro** — layout checks
+
+## License
+
+MIT. Movie, TV, and anime data from [Simkl](https://simkl.com). Skip timestamps from [IntroDB](https://introdb.app).

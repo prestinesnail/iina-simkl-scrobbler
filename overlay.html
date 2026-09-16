@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: transparent !important;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    #hover-pad {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      background: transparent;
+      display: none;
+    }
+    #hover-pad.active {
+      display: block;
+    }
+    .np {
+      position: absolute;
+      left: 3vmin;
+      bottom: calc(3vmin + var(--osc-clearance, 0px));
+      z-index: 2;
+      display: flex;
+      align-items: stretch;
+      gap: 16px;
+      min-width: 520px;
+      max-width: min(74vw, 820px);
+      padding: 14px 18px 14px 14px;
+      border-radius: 18px;
+      color: #f6f7fb;
+      background: rgba(8, 8, 12, 0.84);
+      border: 1px solid rgba(255,255,255,0.12);
+      box-shadow: 0 22px 60px rgba(0,0,0,0.55);
+      overflow: hidden;
+      opacity: 0;
+      transform: translateY(8px);
+      pointer-events: none;
+      transition: opacity 0.55s ease, transform 0.55s ease, bottom 0.25s ease;
+    }
+    .np.visible {
+      opacity: 1;
+      transform: translateY(0);
+      pointer-events: auto;
+    }
+    .np.visible.has-link { cursor: pointer; }
+    .np.visible.fading {
+      opacity: 0;
+      transform: translateY(0);
+      pointer-events: auto;
+    }
+    .np.visible.fading.peek { opacity: 1; }
+    .np-bg {
+      position: absolute;
+      inset: -24px -40px -24px 40%;
+      background: center / cover no-repeat;
+      filter: blur(22px) saturate(160%);
+      opacity: 0.38;
+      pointer-events: none;
+    }
+    .np-wash {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, rgba(8,8,12,0.94) 0%, rgba(8,8,12,0.78) 42%, rgba(8,8,12,0.42) 100%);
+      pointer-events: none;
+    }
+    .np-poster {
+      position: relative;
+      z-index: 1;
+      width: 86px;
+      height: 128px;
+      object-fit: cover;
+      border-radius: 10px;
+      background: #1a2230;
+      flex: 0 0 auto;
+      display: block;
+      box-shadow: 0 10px 24px rgba(0,0,0,0.45);
+    }
+    .np-copy {
+      position: relative;
+      z-index: 1;
+      min-width: 0;
+      flex: 1 1 auto;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 8px;
+      padding: 2px 0;
+    }
+    .np-live-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-height: 28px;
+    }
+    .np-live {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 4px 10px 4px 8px;
+      border: 1.5px solid #3ddc6c;
+      border-radius: 8px;
+      color: #6ef095;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      background: rgba(61, 220, 108, 0.08);
+      flex: 0 0 auto;
+    }
+    .np-live[hidden] { display: none !important; }
+    .np-live-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #3ddc6c;
+      box-shadow: 0 0 8px rgba(61, 220, 108, 0.9);
+    }
+    .np-live[data-state="waiting"],
+    .np-live[data-state="sending"] {
+      border-color: #ffc14d;
+      color: #ffd27a;
+      background: rgba(255, 193, 77, 0.1);
+    }
+    .np-live[data-state="waiting"] .np-live-dot,
+    .np-live[data-state="sending"] .np-live-dot { background: #ffc14d; box-shadow: 0 0 8px rgba(255, 193, 77, 0.9); }
+    .np-live[data-state="paused"],
+    .np-live[data-state="stopped"] {
+      border-color: #8ea0b8;
+      color: #c5d0dc;
+      background: rgba(142, 160, 184, 0.1);
+    }
+    .np-live[data-state="paused"] .np-live-dot,
+    .np-live[data-state="stopped"] .np-live-dot { background: #8ea0b8; box-shadow: none; }
+    .np-live[data-state="error"] {
+      border-color: #ff6b63;
+      color: #ff8b85;
+      background: rgba(255, 107, 99, 0.1);
+    }
+    .np-live[data-state="error"] .np-live-dot { background: #ff6b63; box-shadow: none; }
+    .np-live[data-state="off"] {
+      border-color: #8b8b8f;
+      color: #c8c8cc;
+      background: rgba(139, 139, 143, 0.12);
+    }
+    .np-live[data-state="off"] .np-live-dot { background: #8b8b8f; box-shadow: none; }
+    .np-started {
+      margin: 0;
+      color: rgba(255,255,255,0.55);
+      font-size: 13px;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .np-title-row {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      min-width: 0;
+    }
+    .np-title {
+      margin: 0;
+      font-size: 26px;
+      font-weight: 700;
+      line-height: 1.15;
+      letter-spacing: -0.03em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .np-year {
+      margin: 0;
+      color: rgba(255,255,255,0.48);
+      font-size: 15px;
+      font-weight: 600;
+      flex: 0 0 auto;
+    }
+    .np-meta {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+    .np-meta[hidden] { display: none !important; }
+    .np-ep-pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 3px 8px;
+      border-radius: 6px;
+      border: 1px solid rgba(232, 197, 71, 0.85);
+      color: #f0d36a;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      flex: 0 0 auto;
+      background: rgba(232, 197, 71, 0.08);
+    }
+    .np-ep-pill[hidden] { display: none !important; }
+    .np-ep {
+      margin: 0;
+      color: rgba(255,255,255,0.78);
+      font-size: 15px;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .np-stats {
+      position: relative;
+      z-index: 1;
+      flex: 0 0 auto;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      justify-content: center;
+      padding: 0 4px 0 12px;
+      min-width: 132px;
+      text-align: right;
+    }
+    .np-percent {
+      font-size: 44px;
+      font-weight: 800;
+      line-height: 0.9;
+      letter-spacing: -0.04em;
+      color: rgba(255,255,255,0.82);
+      font-variant-numeric: tabular-nums;
+    }
+    .np-percent-label {
+      margin-top: 4px;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.18em;
+      color: rgba(255,255,255,0.42);
+    }
+    .np-left {
+      margin-top: 10px;
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      color: rgba(255,255,255,0.72);
+    }
+    #skip-wrap {
+      position: absolute;
+      right: 3vmin;
+      bottom: calc(3vmin + var(--osc-clearance, 0px));
+      z-index: 3;
+      visibility: hidden;
+      opacity: 0;
+      transform: translateX(18px);
+      transition: opacity 0.55s ease, transform 0.55s ease, visibility 0s linear 0.55s;
+    }
+    #skip-wrap.visible {
+      visibility: visible;
+      opacity: 1;
+      transform: translateX(0);
+      transition-delay: 0s;
+    }
+    #skip-wrap.visible.fading {
+      visibility: visible;
+      opacity: 0.16;
+      transform: translateX(0);
+    }
+    #skip-wrap.visible:hover,
+    #skip-wrap.visible.fading:hover { opacity: 1; }
+    #skip {
+      appearance: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 168px;
+      padding: 14px 28px;
+      border: 0;
+      border-radius: 10px;
+      color: rgba(20, 20, 20, 0.92);
+      background: rgba(245, 245, 242, 0.9);
+      box-shadow: 0 18px 40px rgba(0, 0, 0, 0.32), inset 0 0 0 1px rgba(255, 255, 255, 0.7);
+      -webkit-backdrop-filter: blur(22px) saturate(140%);
+      backdrop-filter: blur(22px) saturate(140%);
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      cursor: pointer;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="hover-pad" data-clickable></div>
+  <div id="np" class="np" data-clickable>
+    <div id="np-bg" class="np-bg"></div>
+    <div class="np-wash"></div>
+    <img id="np-poster" class="np-poster" alt="">
+    <div class="np-copy">
+      <div class="np-live-row">
+        <span id="np-live" class="np-live" hidden>
+          <span class="np-live-dot"></span>
+          <span id="np-live-label">Now Watching</span>
+        </span>
+        <p id="np-started" class="np-started"></p>
+      </div>
+      <div class="np-title-row">
+        <p id="np-title" class="np-title"></p>
+        <p id="np-year" class="np-year" hidden></p>
+      </div>
+      <div id="np-meta" class="np-meta" hidden>
+        <span id="np-ep-pill" class="np-ep-pill" hidden></span>
+        <p id="np-ep" class="np-ep"></p>
+      </div>
+    </div>
+    <div class="np-stats">
+      <div id="np-percent" class="np-percent">0%</div>
+      <div class="np-percent-label">WATCHED</div>
+      <div id="np-left" class="np-left"></div>
+    </div>
+  </div>
+  <div id="skip-wrap" data-clickable>
+    <button id="skip" type="button" data-clickable>Skip Intro</button>
+  </div>
+  <script>
+    (function () {
+      var np = document.getElementById("np");
+      var npBg = document.getElementById("np-bg");
+      var poster = document.getElementById("np-poster");
+      var live = document.getElementById("np-live");
+      var liveLabel = document.getElementById("np-live-label");
+      var started = document.getElementById("np-started");
+      var title = document.getElementById("np-title");
+      var year = document.getElementById("np-year");
+      var meta = document.getElementById("np-meta");
+      var epPill = document.getElementById("np-ep-pill");
+      var episode = document.getElementById("np-ep");
+      var percent = document.getElementById("np-percent");
+      var left = document.getElementById("np-left");
+      var skipWrap = document.getElementById("skip-wrap");
+      var skip = document.getElementById("skip");
+      var hoverPad = document.getElementById("hover-pad");
+      var peekTimer = null;
+      var peekHoldMs = 2500;
+      var mediaUrl = "";
+      var windowHovered = false;
+      var trackWindowHover = false;
+
+      function post(name, data) {
+        try {
+          if (typeof iina !== "undefined" && typeof iina.postMessage === "function") {
+            iina.postMessage(name, data);
+          }
+        } catch (_error) {}
+      }
+
+      function pad2(value) {
+        var n = Math.max(0, Math.floor(Number(value) || 0));
+        return n < 10 ? "0" + n : String(n);
+      }
+
+      function episodePill(payload) {
+        if (!payload || payload.kind === "movie") return "";
+        if (payload.episodePill) return String(payload.episodePill);
+        var ep = payload.number != null ? Number(payload.number) : 0;
+        if ((!ep || !isFinite(ep)) && payload.episodeChip) ep = Number(payload.episodeChip);
+        if (!isFinite(ep) || ep <= 0) return "";
+        ep = Math.floor(ep);
+        if (payload.kind === "anime") return "Ep. " + ep;
+        var season = Number(payload.season != null ? payload.season : payload.seasonChip);
+        if (isFinite(season) && season > 0) return "S" + pad2(season) + "E" + pad2(ep);
+        var code = String(payload.episodeCode || "").trim();
+        return code || "Ep. " + ep;
+      }
+
+      function clearPeekTimer() {
+        if (peekTimer) {
+          clearTimeout(peekTimer);
+          peekTimer = null;
+        }
+      }
+
+      function hidePeek() {
+        clearPeekTimer();
+        np.classList.remove("peek");
+      }
+
+      function showPeek() {
+        if (!np.classList.contains("visible") || !np.classList.contains("fading")) return;
+        np.classList.add("peek");
+        setHoverPad(true);
+        clearPeekTimer();
+        peekTimer = setTimeout(hidePeek, peekHoldMs);
+      }
+
+      function setHoverPad(on) {
+        hoverPad.classList.toggle("active", !!on);
+      }
+
+      function setWindowHovered(on) {
+        on = !!on;
+        if (windowHovered === on) return;
+        windowHovered = on;
+        post(on ? "overlay-hover" : "overlay-leave");
+      }
+
+      function eventStaysInside(event) {
+        var to = event && event.relatedTarget;
+        if (!to) return false;
+        return !!(
+          (np.contains && np.contains(to)) ||
+          (hoverPad.contains && hoverPad.contains(to)) ||
+          to === np ||
+          to === hoverPad
+        );
+      }
+
+      function syncWindowHover() {
+        if (!trackWindowHover) return;
+        var hovered = false;
+        try {
+          hovered = !!(
+            (hoverPad.matches && hoverPad.matches(":hover")) ||
+            (np.matches && np.matches(":hover"))
+          );
+        } catch (_error) {}
+        setWindowHovered(hovered);
+      }
+
+      function installHitTest() {
+        if (!window.iina) return;
+        window.iina._hitTest = function (x, y) {
+          var el = document.elementFromPoint(x, y);
+          if (!el) return false;
+          if (el.closest && el.closest("#skip-wrap.visible")) return true;
+          if (hoverPad.classList.contains("active")) return true;
+          if (el.dataset && Object.prototype.hasOwnProperty.call(el.dataset, "clickable")) return true;
+          return false;
+        };
+      }
+
+      function applyNowPlaying(payload, fading, scrobble, trackHover) {
+        if (!payload) {
+          hidePeek();
+          mediaUrl = "";
+          np.classList.remove("visible");
+          np.classList.remove("fading");
+          np.classList.remove("has-link");
+          np.removeAttribute("title");
+          trackWindowHover = false;
+          setHoverPad(false);
+          setWindowHovered(false);
+          return;
+        }
+        var posterUrl = payload.posterUrl || "https://wsrv.nl/?url=https://simkl.in/poster_no_pic_c.png";
+        var safePoster = /^https:\/\/wsrv\.nl\//.test(posterUrl) && !/["')\\\s]/.test(posterUrl) ? posterUrl : "";
+        poster.src = safePoster || "https://wsrv.nl/?url=https://simkl.in/poster_no_pic_c.png";
+        npBg.style.backgroundImage = safePoster ? 'url("' + safePoster + '")' : "";
+        title.textContent = payload.title || "Unknown title";
+        if (payload.year) {
+          year.hidden = false;
+          year.textContent = "(" + payload.year + ")";
+        } else {
+          year.hidden = true;
+          year.textContent = "";
+        }
+        var ep = episodePill(payload);
+        if (ep) {
+          meta.hidden = false;
+          epPill.hidden = false;
+          epPill.textContent = ep;
+          episode.textContent = payload.episodeTitle || "";
+          episode.style.display = payload.episodeTitle ? "block" : "none";
+        } else {
+          epPill.hidden = true;
+          epPill.textContent = "";
+          episode.textContent = "";
+          meta.hidden = true;
+        }
+        var progress = Math.max(0, Math.min(100, Math.round(Number(payload.progress || 0))));
+        percent.textContent = progress + "%";
+        left.textContent = payload.remainingLabel || "";
+        var chip = scrobble || payload.status || null;
+        if (!chip || !chip.label) {
+          live.hidden = true;
+          live.dataset.state = "";
+          liveLabel.textContent = "";
+        } else {
+          live.hidden = false;
+          live.dataset.state = chip.state || "watching";
+          liveLabel.textContent = chip.label;
+        }
+        started.textContent = payload.startedLabel || "";
+        mediaUrl = payload.url ? String(payload.url) : "";
+        np.classList.toggle("has-link", !!mediaUrl);
+        if (mediaUrl) np.setAttribute("title", "Open on Simkl");
+        else np.removeAttribute("title");
+        np.classList.toggle("fading", !!fading);
+        np.classList.add("visible");
+        trackWindowHover = !!trackHover && !fading;
+        setHoverPad(!!fading || trackWindowHover);
+        if (!fading) hidePeek();
+        if (trackWindowHover) setTimeout(syncWindowHover, 0);
+        else if (!fading) setWindowHovered(false);
+      }
+
+      function applySkip(visible, fading, label) {
+        skip.textContent = label || "Skip Intro";
+        skipWrap.classList.toggle("visible", !!visible);
+        skipWrap.classList.toggle("fading", !!visible && !!fading);
+      }
+
+      function requestSkip(event) {
+        if (event) event.stopPropagation();
+        post("skip-intro");
+      }
+
+      skip.addEventListener("click", requestSkip);
+      np.addEventListener("click", function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (mediaUrl) post("overlay-open", { url: mediaUrl });
+      });
+      np.addEventListener("mouseenter", function () {
+        if (trackWindowHover) setWindowHovered(true);
+        showPeek();
+      });
+      np.addEventListener("mousemove", function () {
+        if (trackWindowHover) setWindowHovered(true);
+        showPeek();
+      });
+      np.addEventListener("mouseleave", function (event) {
+        if (trackWindowHover && !eventStaysInside(event)) setWindowHovered(false);
+      });
+      hoverPad.addEventListener("mouseenter", function () {
+        if (trackWindowHover) setWindowHovered(true);
+        showPeek();
+      });
+      hoverPad.addEventListener("mousemove", function () {
+        if (trackWindowHover) setWindowHovered(true);
+        showPeek();
+      });
+      hoverPad.addEventListener("mouseleave", function (event) {
+        if (trackWindowHover && !eventStaysInside(event)) setWindowHovered(false);
+      });
+      hoverPad.addEventListener("dblclick", function (event) {
+        event.preventDefault();
+        post("overlay-dblclick");
+      });
+      hoverPad.addEventListener("contextmenu", function (event) {
+        event.preventDefault();
+        post("overlay-pause");
+      });
+
+      if (typeof iina !== "undefined") {
+        installHitTest();
+        setTimeout(installHitTest, 0);
+        iina.onMessage("peek", function () {
+          showPeek();
+        });
+        iina.onMessage("overlay-state", function (state) {
+          state = state || {};
+          var clearance = Math.max(0, Number(state.oscClearance || 0));
+          document.documentElement.style.setProperty("--osc-clearance", clearance + "px");
+          applyNowPlaying(
+            state.nowPlaying || null,
+            !!state.nowPlayingFading,
+            state.scrobble,
+            !!state.trackHover
+          );
+          applySkip(!!state.skip, !!state.skipFading, state.skipLabel);
+        });
+        post("overlay-ready");
+      }
+    })();
+  </script>
+</body>
+</html>

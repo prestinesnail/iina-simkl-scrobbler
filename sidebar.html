@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    :root {
+      color-scheme: light dark;
+      --text: #e8e8e8;
+      --secondary: rgba(255, 255, 255, 0.58);
+      --tertiary: rgba(255, 255, 255, 0.38);
+      --line: rgba(255, 255, 255, 0.12);
+      --fill: rgba(255, 255, 255, 0.06);
+      --blue: #1b6fbf;
+      --green: #30d158;
+      --orange: #ff9f0a;
+      --red: #ff453a;
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --mono: "SF Mono", Menlo, monospace;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --text: #1c1c1e;
+        --secondary: rgba(0, 0, 0, 0.55);
+        --tertiary: rgba(0, 0, 0, 0.4);
+        --line: rgba(0, 0, 0, 0.1);
+        --fill: rgba(0, 0, 0, 0.04);
+        --blue: #0e5dab;
+        --green: #248a3d;
+        --orange: #c93400;
+      }
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; background: transparent; }
+    body {
+      color: var(--text);
+      font: 13px/1.35 var(--font);
+      -webkit-font-smoothing: antialiased;
+    }
+    .shell { display: flex; flex-direction: column; min-height: 100vh; padding: 8px 0 12px; }
+    .header, .section, .footer, .provider { margin: 0 8px; }
+    .header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+    h1 { margin: 0; font-size: 17px; letter-spacing: -0.02em; }
+    .hero { color: var(--secondary); font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+    .hero[data-state="error"], .hero[data-state="missing_credentials"] { color: var(--red); }
+    .section { padding: 10px 0 8px; border-top: 1px solid var(--line); }
+    .label { margin: 0 0 6px; font-size: 10px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--tertiary); }
+    .title { margin: 0; font-size: 15px; font-weight: 700; }
+    .caption, .meta { margin: 4px 0 0; color: var(--secondary); font-size: 12px; }
+    .row { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+    .code-box { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 4px; background: var(--fill); }
+    .code-value {
+      width: 100%; border: 0; outline: 0; background: transparent; color: var(--text);
+      font: 700 20px/1.2 var(--mono); letter-spacing: 0.14em;
+    }
+    .np-card { padding: 10px; border-radius: 12px; background: var(--fill); border: 1px solid var(--line); }
+    .np-top { display: flex; align-items: stretch; gap: 12px; }
+    .np-poster-btn {
+      padding: 0; border: 0; background: transparent; flex: 0 0 auto;
+      border-radius: 10px; line-height: 0;
+    }
+    .np-poster-btn[data-open="true"] { cursor: pointer; }
+    .np-poster { width: 96px; height: 141px; object-fit: cover; border-radius: 10px; background: #1a2230; display: block; }
+    .np-copy { min-width: 0; display: flex; flex-direction: column; justify-content: center; }
+    .np-kind { margin: 0 0 6px; font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--blue); }
+    .np-title { margin: 0; font-size: 16px; font-weight: 700; line-height: 1.2; letter-spacing: -0.02em; }
+    .np-meta { margin: 8px 0 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .np-chip {
+      display: inline-flex; flex-direction: column; justify-content: center; align-items: center;
+      min-width: 48px; padding: 4px 8px 5px; border-radius: 10px; color: #fff; line-height: 1; text-align: center;
+    }
+    .np-chip-label {
+      font-size: 8px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.75; text-align: center;
+    }
+    .np-chip-value { margin-top: 3px; font-size: 15px; font-weight: 800; letter-spacing: -0.03em; text-align: center; }
+    .np-chip-season { background: linear-gradient(165deg, #5cb0ff 0%, #1b6fbf 100%); }
+    .np-chip-episode { background: linear-gradient(165deg, #ff8cc4 0%, #e23d8a 100%); }
+    .np-status {
+      display: inline-flex; align-items: center; min-height: 22px; padding: 0 8px; border-radius: 999px;
+      font-size: 12px; font-weight: 700; letter-spacing: 0.04em; color: #fff;
+    }
+    .np-status[data-state="playing"] { background: var(--green); }
+    .np-status[data-state="paused"] { background: var(--orange); }
+    .np-status[data-state="idle"] { background: rgba(120, 120, 128, 0.55); }
+    .np-status[data-state="unmatched"] { background: var(--red); }
+    .np-ep { margin: 8px 0 0; color: var(--secondary); font-size: 13px; }
+    .np-year { margin: 8px 0 0; color: var(--secondary); font-size: 13px; }
+    .poster { width: 38px; height: 56px; border-radius: 4px; object-fit: cover; background: var(--fill); border: 1px solid var(--line); flex: 0 0 auto; }
+    .media-name { margin: 0; font-size: 15px; font-weight: 700; line-height: 1.2; }
+    .np-progress { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+    .progress-bar { position: relative; height: 5px; border-radius: 99px; overflow: hidden; background: rgba(120, 120, 128, 0.28); }
+    .progress-fill { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--blue); }
+    .progress-meta { display: flex; justify-content: space-between; margin-top: 6px; color: var(--secondary); font-size: 11px; font-variant-numeric: tabular-nums; }
+    .skip-block { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); }
+    .skip-list { display: flex; flex-direction: column; }
+    .skip-row {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      min-height: 24px; padding: 3px 0;
+    }
+    .skip-kind {
+      margin: 0; font-size: 11px; font-weight: 700; letter-spacing: 0.06em;
+      text-transform: uppercase; color: var(--blue);
+    }
+    .skip-time { margin: 0; color: var(--secondary); font-size: 12px; font-variant-numeric: tabular-nums; }
+    .control { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; }
+    .link { color: var(--blue); text-decoration: none; }
+    .query { display: flex; gap: 6px; align-items: center; }
+    .text-input {
+      flex: 1; min-width: 0; min-height: 28px; padding: 0 8px; border-radius: 3px;
+      border: 1px solid var(--line); background: var(--fill); color: var(--text); font: inherit;
+    }
+    .result { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); }
+    .result:first-child { border-top: 0; }
+    .footer { margin-top: auto; padding-top: 10px; border-top: 1px solid var(--line); }
+    .actions { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+    .provider { margin-top: 12px; display: flex; justify-content: space-between; color: var(--tertiary); font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase; }
+    button {
+      min-height: 28px; padding: 0 11px; border-radius: 3px; border: 1px solid var(--line);
+      font: 600 13px var(--font); cursor: pointer; color: var(--text); background: var(--fill);
+    }
+    button.primary { color: #fff; background: var(--blue); border-color: transparent; }
+    button.ghost { background: transparent; color: var(--secondary); }
+    button.danger { color: var(--red); background: transparent; border-color: rgba(255, 69, 58, 0.2); }
+    button.switch { min-width: 38px; min-height: 22px; padding: 2px; border-radius: 99px; background: rgba(120, 120, 128, 0.32); }
+    button.switch[aria-checked="true"] { background: var(--blue); }
+    .thumb { display: block; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: transform 120ms ease; }
+    button.switch[aria-checked="true"] .thumb { transform: translateX(16px); }
+    button:disabled { opacity: 0.45; cursor: default; }
+    button.np-poster-btn {
+      min-height: 0; padding: 0; border: 0; background: transparent; border-radius: 10px;
+    }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="header">
+      <h1>SIMKL Scrobbler</h1>
+      <span id="hero" class="hero" data-state="disconnected">Disconnected</span>
+    </header>
+
+    <section class="section">
+      <div class="row">
+        <div>
+          <p id="auth-summary" class="title">Not connected</p>
+          <p id="auth-detail" class="caption">Add a client ID, then connect.</p>
+        </div>
+        <button id="connect" class="primary" type="button">Connect</button>
+      </div>
+      <div id="pin-box" class="code-box" hidden>
+        <p class="label">PIN code</p>
+        <div class="query">
+          <input id="pin-code" class="code-value" type="text" readonly spellcheck="false" aria-label="Simkl PIN">
+          <button id="copy-pin" type="button">Copy</button>
+        </div>
+        <p id="pin-note" class="caption">Enter this code at simkl.com/pin</p>
+      </div>
+      <div id="scrobble-control" class="control" hidden>
+        <div>
+          <p class="title" style="font-size:12px">Scrobbling</p>
+          <p id="scrobble-caption" class="caption">On</p>
+        </div>
+        <button id="scrobble-toggle" class="switch" type="button" role="switch" aria-checked="true" aria-label="Toggle scrobbling">
+          <span class="thumb"></span>
+        </button>
+      </div>
+    </section>
+
+    <section id="playback-section" class="section">
+      <p class="label">Now playing</p>
+      <div class="np-card">
+        <div class="np-top">
+          <button id="poster-btn" class="np-poster-btn" type="button" aria-label="Open on Simkl">
+            <img id="poster" class="np-poster" alt="">
+          </button>
+          <div class="np-copy">
+            <p id="media-kind" class="np-kind" hidden></p>
+            <p id="media-name" class="np-title">No active media</p>
+            <div id="media-chips" class="np-meta" hidden>
+              <span id="media-season" class="np-chip np-chip-season" hidden>
+                <span class="np-chip-label">Season</span>
+                <span id="media-season-value" class="np-chip-value"></span>
+              </span>
+              <span id="media-episode" class="np-chip np-chip-episode" hidden>
+                <span class="np-chip-label">Episode</span>
+                <span id="media-episode-value" class="np-chip-value"></span>
+              </span>
+              <span id="media-status" class="np-status" data-state="idle" hidden></span>
+            </div>
+            <p id="media-episode-title" class="np-ep" hidden></p>
+            <p id="media-year" class="np-year" hidden></p>
+            <p id="media-empty" class="meta">Load a movie or episode.</p>
+          </div>
+        </div>
+        <div id="np-progress" class="np-progress" hidden>
+          <div class="progress-bar"><div id="progress-fill" class="progress-fill"></div></div>
+          <div class="progress-meta">
+            <span id="progress-left">0%</span>
+            <span id="progress-right">00:00 / 00:00</span>
+          </div>
+        </div>
+        <div id="skip-intro-block" class="skip-block" hidden>
+          <div id="skip-intro-list" class="skip-list"></div>
+          <p id="skip-intro-line" class="caption" hidden></p>
+        </div>
+      </div>
+    </section>
+
+    <section id="scrobble-section" class="section" hidden>
+      <p class="label">Scrobble</p>
+      <p id="scrobble-verb" class="title">Waiting</p>
+      <p id="scrobble-detail" class="caption">Waiting for playback.</p>
+    </section>
+
+    <section id="correction-section" class="section" hidden>
+      <p class="label">Correct match</p>
+      <div id="correction-closed">
+        <div class="row">
+          <p id="correction-summary" class="caption">Wrong title? Search Simkl and pick the right one.</p>
+          <button id="open-correction" type="button">Search</button>
+        </div>
+      </div>
+      <div id="correction-open" hidden>
+        <div class="query">
+          <input id="correction-query" class="text-input" type="text" placeholder="Search movies, TV, anime" spellcheck="false">
+          <button id="correction-search" type="button">Search</button>
+          <button id="correction-close" class="ghost" type="button">Close</button>
+        </div>
+        <p id="correction-status" class="caption">Search Simkl for a better match.</p>
+        <div id="correction-results"></div>
+      </div>
+    </section>
+
+    <footer id="bottom" class="footer" hidden>
+      <div class="actions">
+        <button id="reauth" type="button">Re-auth</button>
+        <button id="signout" class="danger" type="button">Sign out</button>
+      </div>
+    </footer>
+
+    <div class="provider">
+      <a class="link" href="https://simkl.com" id="powered">Movie, TV and anime data from Simkl</a>
+      <span id="version"></span>
+    </div>
+  </div>
+  <script>
+    (function () {
+      var state = {
+        scrobblingEnabled: true,
+        auth: { state: "disconnected", summary: "", detail: "", busy: false, connected: false, userCode: "", verificationUrl: "", user: null },
+        playback: { available: false, unmatched: false, mediaLabel: "", filename: "", title: "", kind: "", kindLabel: "", year: null, season: null, number: null, seasonChip: "", episodeChip: "", episodeCode: "", episodeTitle: "", url: "", posterUrl: "", state: "idle", progress: 0, position: 0, duration: 0 },
+        scrobble: { status: "idle", verb: "", action: "", mediaLabel: "", detail: "", reason: "" },
+        correction: { active: false, busy: false, query: "", error: "", results: [] },
+        app: { version: "" }
+      };
+      var hydrated = false;
+      var readyTimer = null;
+      var readyPings = 0;
+      var lastReadyPingAt = 0;
+      var MAX_READY_PINGS = 20;
+
+      function send(name, payload) {
+        try {
+          if (window.iina && typeof iina.postMessage === "function") iina.postMessage(name, payload);
+        } catch (_error) {}
+      }
+      function pingReady() {
+        if (hydrated || readyPings >= MAX_READY_PINGS) {
+          stopReadyPing();
+          return;
+        }
+        var now = Date.now();
+        if (lastReadyPingAt && now - lastReadyPingAt < 500) return;
+        lastReadyPingAt = now;
+        readyPings += 1;
+        send("ready", { hydrated: false });
+      }
+      function stopReadyPing() {
+        if (!readyTimer) return;
+        clearInterval(readyTimer);
+        readyTimer = null;
+      }
+      function startReadyPing() {
+        if (readyTimer || hydrated) return;
+        pingReady();
+        readyTimer = setInterval(function () {
+          if (hydrated || readyPings >= MAX_READY_PINGS) {
+            stopReadyPing();
+            return;
+          }
+          pingReady();
+        }, 500);
+      }
+      function applyState(payload) {
+        if (!payload || typeof payload !== "object") return false;
+        if (payload.auth == null && payload.playback == null && payload.app == null) return false;
+        var first = !hydrated;
+        state = payload;
+        hydrated = true;
+        stopReadyPing();
+        render();
+        if (first) send("ready", { hydrated: true });
+        return true;
+      }
+      function $(id) { return document.getElementById(id); }
+      function setText(id, value) { var node = $(id); if (node) node.textContent = value || ""; }
+      function setHidden(id, hidden) { var node = $(id); if (node) node.hidden = !!hidden; }
+      function chipNumber(value) {
+        var n = Math.floor(Number(String(value).replace(/^0+/, "") || 0));
+        if (!isFinite(n) || n < 0) n = 0;
+        return n;
+      }
+      function titleCase(value) {
+        return String(value || "").replace(/[_-]+/g, " ").replace(/\b[a-z]/g, function (ch) { return ch.toUpperCase(); });
+      }
+      function formatDuration(total) {
+        var value = Math.max(0, Math.floor(Number(total || 0)));
+        var h = Math.floor(value / 3600);
+        var m = Math.floor((value % 3600) / 60);
+        var s = value % 60;
+        function pad(n) { return n < 10 ? "0" + n : String(n); }
+        return h ? pad(h) + ":" + pad(m) + ":" + pad(s) : pad(m) + ":" + pad(s);
+      }
+      function bind(id, fn) {
+        var node = $(id);
+        if (!node) return;
+        node.addEventListener("click", function (event) {
+          event.preventDefault();
+          fn(event);
+        });
+      }
+
+      function render() {
+        var auth = state.auth || {};
+        var playback = state.playback || {};
+        var scrobble = state.scrobble || {};
+        var correction = state.correction || {};
+        var connected = !!auth.connected;
+        $("hero").dataset.state = auth.state || "disconnected";
+        setText("hero", titleCase(auth.state === "authorizing" ? "waiting" : (auth.state || "disconnected")));
+        setText("auth-summary", auth.connected && auth.user && auth.user.name ? ("Signed in as " + auth.user.name) : (auth.summary || "Not connected"));
+        setText("auth-detail", auth.detail || "");
+        setHidden("auth-detail", !auth.detail);
+        $("connect").hidden = connected;
+        $("connect").disabled = !!auth.busy;
+        $("connect").textContent = auth.busy ? "Connecting…" : "Connect";
+        setHidden("pin-box", !auth.userCode);
+        if (auth.userCode) {
+          $("pin-code").value = auth.userCode;
+          setText("pin-note", "Enter this code at " + String(auth.verificationUrl || "simkl.com/pin").replace(/^https?:\/\//, ""));
+        }
+        setHidden("scrobble-control", !connected);
+        $("scrobble-toggle").setAttribute("aria-checked", state.scrobblingEnabled ? "true" : "false");
+        setText("scrobble-caption", state.scrobblingEnabled ? "On" : "Off");
+        setHidden("scrobble-section", !(connected || auth.busy));
+        setHidden("correction-section", !connected);
+        setHidden("bottom", !connected);
+        var poster = $("poster");
+        var posterBtn = $("poster-btn");
+        var statusChip = $("media-status");
+        var playState = playback.unmatched ? "unmatched" : (playback.state || "idle");
+        var statusLabel = playback.unmatched ? "Unmatched" : titleCase(playState);
+        if (playback.available) {
+          setText("media-kind", playback.kindLabel || titleCase(playback.kind));
+          setHidden("media-kind", !(playback.kindLabel || playback.kind));
+          setText("media-name", playback.title || playback.mediaLabel || "Unknown title");
+          var seasonN = chipNumber(playback.seasonChip || playback.season);
+          var episodeN = chipNumber(playback.episodeChip || playback.number);
+          var seasonChip = seasonN ? String(seasonN) : "";
+          var episodeChip = episodeN ? String(episodeN) : "";
+          if (!episodeChip) seasonChip = "";
+          setText("media-season-value", seasonChip);
+          setHidden("media-season", !seasonChip);
+          setText("media-episode-value", episodeChip);
+          setHidden("media-episode", !episodeChip);
+          setText("media-episode-title", playback.episodeTitle || "");
+          setHidden("media-episode-title", !playback.episodeTitle);
+          setHidden("media-year", !!playback.episodeCode || !playback.year);
+          setText("media-year", playback.year ? String(playback.year) : "");
+          setHidden("media-empty", true);
+          poster.src = playback.posterUrl || "https://wsrv.nl/?url=https://simkl.in/poster_no_pic_c.png";
+          poster.hidden = false;
+          if (posterBtn) posterBtn.hidden = false;
+        } else if (playback.unmatched) {
+          setHidden("media-kind", true);
+          setText("media-name", playback.filename || "Unmatched file");
+          setHidden("media-season", true);
+          setHidden("media-episode", true);
+          setHidden("media-episode-title", true);
+          setHidden("media-year", true);
+          setHidden("media-empty", true);
+          poster.hidden = true;
+          if (posterBtn) posterBtn.hidden = true;
+        } else {
+          setHidden("media-kind", true);
+          setText("media-name", "No active media");
+          setHidden("media-season", true);
+          setHidden("media-episode", true);
+          setHidden("media-episode-title", true);
+          setHidden("media-year", true);
+          setHidden("media-empty", false);
+          poster.hidden = true;
+          if (posterBtn) posterBtn.hidden = true;
+        }
+        statusChip.dataset.state = playState;
+        setText("media-status", statusLabel);
+        setHidden("media-status", !(playback.available || playback.unmatched));
+        setHidden("media-chips", $("media-season").hidden && $("media-episode").hidden && $("media-status").hidden);
+        setHidden("np-progress", !(playback.available || playback.unmatched || playback.duration));
+        if (posterBtn) posterBtn.dataset.open = playback.url ? "true" : "false";
+        var progress = Math.max(0, Math.min(100, Number(playback.progress || 0)));
+        $("progress-fill").style.width = progress + "%";
+        setText("progress-left", Math.round(progress) + "%");
+        setText("progress-right", formatDuration(playback.position) + " / " + formatDuration(playback.duration));
+        var skipIntro = playback.skipIntro || {};
+        var skipItems = skipIntro.items || [];
+        var skipList = $("skip-intro-list");
+        skipList.textContent = "";
+        skipItems.forEach(function (item) {
+          var row = document.createElement("div");
+          row.className = "skip-row";
+          var kind = document.createElement("p");
+          kind.className = "skip-kind";
+          kind.textContent = item.label || "";
+          var time = document.createElement("p");
+          time.className = "skip-time";
+          time.textContent = item.range || "";
+          row.appendChild(kind);
+          row.appendChild(time);
+          skipList.appendChild(row);
+        });
+        setText("skip-intro-line", skipIntro.detail || "");
+        setHidden("skip-intro-line", !skipIntro.detail);
+        setHidden("skip-intro-list", !skipItems.length);
+        setHidden("skip-intro-block", !skipItems.length && !skipIntro.detail);
+
+        var verb = "Waiting";
+        if (scrobble.status === "waiting") {
+          verb = "Waiting to update Simkl";
+          if (scrobble.waitSeconds) verb = "Updating in " + scrobble.waitSeconds + "s";
+        }
+        else if (scrobble.status === "sending") verb = "Updating Simkl";
+        else if (scrobble.status === "succeeded" && scrobble.action === "scrobble") verb = "Watched on Simkl";
+        else if (scrobble.status === "succeeded" && scrobble.verb === "start") verb = "Watching on Simkl";
+        else if (scrobble.status === "succeeded" && scrobble.verb === "pause") verb = "Paused on Simkl";
+        else if (scrobble.status === "succeeded") verb = "Synced to Simkl";
+        else if (scrobble.status === "unmatched") verb = "Title not matched";
+        else if (scrobble.status === "disabled") verb = "Scrobbling off";
+        else if (scrobble.status === "failed") verb = "Simkl error";
+        else if (scrobble.status === "ready") verb = "Ready";
+        setText("scrobble-verb", verb);
+        setText("scrobble-detail", scrobble.detail || "");
+
+        setHidden("correction-closed", !!correction.active);
+        setHidden("correction-open", !correction.active);
+        var query = $("correction-query");
+        if (query && document.activeElement !== query) query.value = correction.query || "";
+        setText("correction-status", correction.busy ? "Searching Simkl…" : (correction.error || "Search Simkl for a better match."));
+        var results = $("correction-results");
+        results.textContent = "";
+        (correction.results || []).forEach(function (item) {
+          var row = document.createElement("div");
+          row.className = "result";
+          if (item.posterUrl) {
+            var img = document.createElement("img");
+            img.className = "poster";
+            img.src = item.posterUrl;
+            img.alt = "";
+            row.appendChild(img);
+          }
+          var copy = document.createElement("div");
+          var title = document.createElement("p");
+          title.className = "media-name";
+          title.style.fontSize = "13px";
+          title.textContent = item.title || "Untitled";
+          var subtitle = document.createElement("p");
+          subtitle.className = "caption";
+          subtitle.textContent = item.subtitle || "";
+          copy.appendChild(title);
+          copy.appendChild(subtitle);
+          row.appendChild(copy);
+          var use = document.createElement("button");
+          use.type = "button";
+          use.textContent = "Use";
+          use.addEventListener("click", function () {
+            send("choose_correction", { key: item.key });
+          });
+          row.appendChild(use);
+          results.appendChild(row);
+        });
+        setText("version", state.app && state.app.version ? ("v" + state.app.version) : "");
+        $("reauth").disabled = !!auth.busy;
+        $("signout").disabled = !!auth.busy;
+      }
+
+      bind("connect", function () { send("connect"); });
+      bind("reauth", function () { send("connect"); });
+      bind("signout", function () { send("signout"); });
+      bind("copy-pin", function () { send("copy_auth_code"); });
+      bind("scrobble-toggle", function () { send("toggle_scrobbling", { enabled: !state.scrobblingEnabled }); });
+      bind("open-correction", function () { send("open_correction"); });
+      bind("correction-close", function () { send("close_correction"); });
+      bind("correction-search", function () { send("search_correction", { query: $("correction-query").value }); });
+      bind("poster-btn", function () {
+        if (state.playback && state.playback.url) send("open_url", { url: state.playback.url });
+      });
+      bind("powered", function (event) {
+        event.preventDefault();
+        send("open_url", { url: "https://simkl.com" });
+      });
+      $("correction-query").addEventListener("keydown", function (event) {
+        if (event.key === "Enter") send("search_correction", { query: $("correction-query").value });
+      });
+
+      function attachIina() {
+        if (!window.iina || typeof iina.onMessage !== "function") return false;
+        iina.onMessage("state", function (payload) {
+          applyState(payload);
+        });
+        iina.onMessage("copy_auth_result", function (payload) {
+          setText("pin-note", (payload && payload.message) || "Copied.");
+        });
+        startReadyPing();
+        return true;
+      }
+      render();
+      if (!attachIina()) {
+        var waits = 0;
+        var waitTimer = setInterval(function () {
+          waits += 1;
+          if (attachIina() || waits > 50) clearInterval(waitTimer);
+        }, 100);
+      }
+      function pingReadyIfNeeded() {
+        if (!hydrated) pingReady();
+      }
+      document.addEventListener("visibilitychange", pingReadyIfNeeded);
+      window.addEventListener("focus", pingReadyIfNeeded);
+      window.addEventListener("pageshow", pingReadyIfNeeded);
+    })();
+  </script>
+</body>
+</html>

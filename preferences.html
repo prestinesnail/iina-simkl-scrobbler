@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+</head>
+<body>
+  <div class="pref-section">
+    Simkl client ID
+    <div style="margin-top: 2px">
+      <input type="text" data-pref-key="simkl_client_id" style="width: 100%; margin-top: 2px" spellcheck="false">
+    </div>
+    <p class="small secondary pref-help">
+      Create a free app at
+      <a href="https://simkl.com/settings/developer/new/">simkl.com/settings/developer</a>
+      and paste the <code>client_id</code> here. No client secret is required.
+    </p>
+  </div>
+
+  <div class="pref-section">
+    <label>
+      <input type="checkbox" data-type="bool" data-pref-key="scrobble_enabled">
+      Enable scrobbling
+    </label>
+    <p class="small secondary pref-help">
+      Send play, pause, and stop events to Simkl. Titles are marked watched at 80% on stop.
+    </p>
+  </div>
+
+  <div class="pref-section">
+    <label>
+      <input type="checkbox" data-type="bool" data-pref-key="status_osd">
+      Show scrobble status on the now-playing overlay
+    </label>
+    <p class="small secondary pref-help">
+      Shows Now Watching, percent watched, and time left on the bottom-left overlay. It stays visible while paused. After resume it hides unless you are hovering the player. Click the card to open the title on Simkl. No top-left popup.
+    </p>
+  </div>
+
+  <div class="pref-section">
+    OSD message length (seconds)
+    <div style="margin-top: 2px">
+      <input type="number" data-type="int" data-pref-key="osd_seconds" min="1" max="15" step="1" style="width: 120px">
+    </div>
+    <p class="small secondary pref-help">
+      How long remaining top-left OSD messages stay on screen, such as Skip Intro confirmations. Range 1–15 seconds.
+    </p>
+  </div>
+
+  <div class="pref-section">
+    <label>
+      <input type="checkbox" data-type="bool" data-pref-key="debug_osd">
+      Show debug OSD messages
+    </label>
+  </div>
+
+  <div class="pref-section">
+    Show titles in
+    <div style="margin-top: 6px">
+      <label>
+        <input type="radio" name="title_language" value="english" data-pref-key>
+        English
+      </label>
+      <br>
+      <label>
+        <input type="radio" name="title_language" value="original" data-pref-key>
+        Original / romaji
+      </label>
+    </div>
+    <p class="small secondary pref-help">
+      English uses Simkl’s English title when available, for example
+      <em>From Overshadowed to Overpowered: Second Reincarnation of a Talentless Sage</em>.
+      Original uses the catalog title, for example
+      <em>Rakudai Kenja no Gakuin Musou: Nidome no Tensei, S Rank Cheat Majutsushi Bouken Roku</em>.
+    </p>
+  </div>
+
+  <div class="pref-section">
+    <label>
+      <input type="checkbox" data-type="bool" data-pref-key="overlay_enabled">
+      Show now-playing overlay
+    </label>
+    <p class="small secondary pref-help">
+      Draws a poster card on the video when a new episode starts. This needs the Video Overlay permission (Settings → this plugin → Permissions). Use Plugin → Preview Now Playing Overlay to test it.
+    </p>
+  </div>
+
+  <div class="pref-section">
+    Overlay display length (seconds)
+    <div style="margin-top: 2px">
+      <input type="number" data-type="int" data-pref-key="overlay_seconds" min="1" max="30" step="1" style="width: 120px">
+    </div>
+    <p class="small secondary pref-help">
+      How long the poster card stays fully visible when an episode starts. Hover anywhere in the player after it fades to show it again. Range 1–30 seconds.
+    </p>
+  </div>
+
+  <div class="pref-section">
+    Overlay length after resume (seconds)
+    <div style="margin-top: 2px">
+      <input type="number" data-type="int" data-pref-key="overlay_resume_seconds" min="1" max="30" step="1" style="width: 120px">
+    </div>
+    <p class="small secondary pref-help">
+      After you unpause, hide the poster card in this many seconds unless the pointer is over the player. Hovering keeps it visible. Range 1–30 seconds.
+    </p>
+  </div>
+
+  <div class="pref-section">
+    <label>
+      <input type="checkbox" data-type="bool" data-pref-key="skip_intro_enabled">
+      Show Skip Intro / Recap / Outro buttons
+    </label>
+    <p class="small secondary pref-help">
+      When IntroDB has timestamps for the Simkl-matched episode, show a skip button during recap, intro, and outro windows. It stays for the whole window, fades after 5 seconds, and remains clickable until that segment ends. Uses the IMDb ID from the Simkl match. Needs the Video Overlay permission.
+    </p>
+  </div>
+
+  <div class="pref-section">
+    <label>
+      <input type="checkbox" data-type="bool" data-pref-key="track_rewatches">
+      Track rewatches (Simkl Pro / VIP)
+    </label>
+    <p class="small secondary pref-help">
+      Off by default. When on, a <code>stop</code> at 80% or more of a title you already finished is logged as a separate viewing. Never sent on play or pause. Requires Simkl Pro or VIP; free accounts are ignored.
+    </p>
+  </div>
+
+  <div class="pref-section">
+    Pause debounce (ms)
+    <div style="margin-top: 2px">
+      <input type="number" data-type="int" data-pref-key="pause_debounce_ms" min="0" max="5000" step="100" style="width: 120px">
+    </div>
+    <p class="small secondary pref-help">
+      Ignore brief pauses caused by seeking. Real pauses and resumes are sent to Simkl (Now Watching pauses, then continues).
+    </p>
+  </div>
+
+  <div class="pref-section">
+    <button id="show-sidebar" type="button">Open SIMKL sidebar</button>
+    <button id="connect" type="button">Connect to Simkl</button>
+    <p class="small secondary pref-help">
+      Authorization uses Simkl’s PIN flow. After clicking Connect, press ⌘K if the PIN does not appear. The sidebar shows a 5-character code to enter at simkl.com/pin.
+    </p>
+  </div>
+
+  <script>
+    function requestAction(kind) {
+      if (!window.iina || !iina.preferences) return;
+      iina.preferences.set("auth_action_kind", kind);
+      iina.preferences.set("auth_action_nonce", String(Date.now()));
+    }
+    document.getElementById("show-sidebar").addEventListener("click", function () {
+      requestAction("show_sidebar");
+    });
+    document.getElementById("connect").addEventListener("click", function () {
+      requestAction("connect");
+    });
+  </script>
+</body>
+</html>
