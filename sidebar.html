@@ -5,6 +5,7 @@
   <style>
     :root {
       color-scheme: light dark;
+      --page: #1c1c1e;
       --text: #e8e8e8;
       --secondary: rgba(255, 255, 255, 0.58);
       --tertiary: rgba(255, 255, 255, 0.38);
@@ -19,6 +20,7 @@
     }
     @media (prefers-color-scheme: light) {
       :root {
+        --page: #f2f2f7;
         --text: #1c1c1e;
         --secondary: rgba(0, 0, 0, 0.55);
         --tertiary: rgba(0, 0, 0, 0.4);
@@ -30,11 +32,24 @@
       }
     }
     * { box-sizing: border-box; }
-    html, body { margin: 0; min-height: 100%; background: transparent; }
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      height: 100%;
+      background: var(--page);
+    }
     body {
       color: var(--text);
       font: 13px/1.35 var(--font);
       -webkit-font-smoothing: antialiased;
+    }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      background: var(--page);
+      pointer-events: none;
     }
     .shell { display: flex; flex-direction: column; min-height: 100vh; padding: 8px 0 12px; }
     .header, .section, .footer, .provider { margin: 0 8px; }
@@ -52,45 +67,114 @@
       width: 100%; border: 0; outline: 0; background: transparent; color: var(--text);
       font: 700 20px/1.2 var(--mono); letter-spacing: 0.14em;
     }
-    .np-card { padding: 10px; border-radius: 12px; background: var(--fill); border: 1px solid var(--line); }
-    .np-top { display: flex; align-items: stretch; gap: 12px; }
+    .np-card {
+      position: relative;
+      overflow: hidden;
+      padding: 12px 14px 12px 12px;
+      border-radius: 18px;
+      color: #f6f7fb;
+      background: rgba(8, 8, 12, 0.84);
+      border: 1px solid rgba(255,255,255,0.12);
+      box-shadow: 0 16px 40px rgba(0,0,0,0.45);
+    }
+    .np-bg {
+      position: absolute;
+      inset: -24px -40px -24px 40%;
+      background: center / cover no-repeat;
+      filter: blur(22px) saturate(160%);
+      opacity: 0.38;
+      pointer-events: none;
+    }
+    .np-wash {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, rgba(8,8,12,0.94) 0%, rgba(8,8,12,0.78) 42%, rgba(8,8,12,0.42) 100%);
+      pointer-events: none;
+    }
+    .np-body {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 0;
+      min-width: 0;
+    }
+    .np-main {
+      display: flex;
+      align-items: stretch;
+      gap: 12px;
+      min-width: 0;
+    }
     .np-poster-btn {
       padding: 0; border: 0; background: transparent; flex: 0 0 auto;
       border-radius: 10px; line-height: 0;
     }
     .np-poster-btn[data-open="true"] { cursor: pointer; }
-    .np-poster { width: 96px; height: 141px; object-fit: cover; border-radius: 10px; background: #1a2230; display: block; }
-    .np-copy { min-width: 0; display: flex; flex-direction: column; justify-content: center; }
-    .np-kind { margin: 0 0 6px; font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--blue); }
-    .np-title { margin: 0; font-size: 16px; font-weight: 700; line-height: 1.2; letter-spacing: -0.02em; }
-    .np-meta { margin: 8px 0 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-    .np-chip {
-      display: inline-flex; flex-direction: column; justify-content: center; align-items: center;
-      min-width: 48px; padding: 4px 8px 5px; border-radius: 10px; color: #fff; line-height: 1; text-align: center;
+    .np-poster {
+      position: relative;
+      width: 72px; height: 108px; object-fit: cover; border-radius: 10px;
+      background: #1a2230; display: block; box-shadow: 0 10px 24px rgba(0,0,0,0.45);
     }
-    .np-chip-label {
-      font-size: 8px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.75; text-align: center;
+    .np-copy {
+      min-width: 0; flex: 1 1 auto;
+      display: flex; flex-direction: column; justify-content: center; gap: 7px;
+      padding: 2px 0;
     }
-    .np-chip-value { margin-top: 3px; font-size: 15px; font-weight: 800; letter-spacing: -0.03em; text-align: center; }
-    .np-chip-season { background: linear-gradient(165deg, #5cb0ff 0%, #1b6fbf 100%); }
-    .np-chip-episode { background: linear-gradient(165deg, #ff8cc4 0%, #e23d8a 100%); }
-    .np-status {
-      display: inline-flex; align-items: center; min-height: 22px; padding: 0 8px; border-radius: 999px;
-      font-size: 12px; font-weight: 700; letter-spacing: 0.04em; color: #fff;
+    .np-live-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; min-height: 22px; }
+    .np-live {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 3px 8px 3px 7px; border: 1.5px solid #3ddc6c; border-radius: 8px;
+      color: #6ef095; font-size: 10px; font-weight: 800; letter-spacing: 0.08em;
+      text-transform: uppercase; background: rgba(61, 220, 108, 0.08); flex: 0 0 auto;
     }
-    .np-status[data-state="playing"] { background: var(--green); }
-    .np-status[data-state="paused"] { background: var(--orange); }
-    .np-status[data-state="idle"] { background: rgba(120, 120, 128, 0.55); }
-    .np-status[data-state="unmatched"] { background: var(--red); }
-    .np-ep { margin: 8px 0 0; color: var(--secondary); font-size: 13px; }
-    .np-year { margin: 8px 0 0; color: var(--secondary); font-size: 13px; }
+    .np-live-dot {
+      width: 6px; height: 6px; border-radius: 50%; background: #3ddc6c;
+      box-shadow: 0 0 8px rgba(61, 220, 108, 0.9);
+    }
+    .np-live[data-state="waiting"], .np-live[data-state="sending"] {
+      border-color: #ffc14d; color: #ffd27a; background: rgba(255, 193, 77, 0.1);
+    }
+    .np-live[data-state="waiting"] .np-live-dot, .np-live[data-state="sending"] .np-live-dot { background: #ffc14d; box-shadow: 0 0 8px rgba(255, 193, 77, 0.9); }
+    .np-live[data-state="paused"], .np-live[data-state="stopped"], .np-live[data-state="ready"] {
+      border-color: #8ea0b8; color: #c5d0dc; background: rgba(142, 160, 184, 0.1);
+    }
+    .np-live[data-state="paused"] .np-live-dot, .np-live[data-state="stopped"] .np-live-dot,
+    .np-live[data-state="ready"] .np-live-dot { background: #8ea0b8; box-shadow: none; }
+    .np-live[data-state="error"], .np-live[data-state="unmatched"] {
+      border-color: #ff6b63; color: #ff8b85; background: rgba(255, 107, 99, 0.1);
+    }
+    .np-live[data-state="error"] .np-live-dot, .np-live[data-state="unmatched"] .np-live-dot { background: #ff6b63; box-shadow: none; }
+    .np-live[data-state="off"] { border-color: #8b8b8f; color: #c8c8cc; background: rgba(139, 139, 143, 0.12); }
+    .np-live[data-state="off"] .np-live-dot { background: #8b8b8f; box-shadow: none; }
+    .np-started { margin: 0; color: rgba(255,255,255,0.55); font-size: 11px; font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .np-title-row { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+    .np-title { margin: 0; font-size: 16px; font-weight: 700; line-height: 1.15; letter-spacing: -0.03em; min-width: 0; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+    .np-year { margin: 0; color: rgba(255,255,255,0.48); font-size: 12px; font-weight: 600; flex: 0 0 auto; }
+    .np-meta { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .np-ep-pill {
+      display: inline-flex; align-items: center; padding: 2px 7px; border-radius: 6px;
+      border: 1px solid rgba(232, 197, 71, 0.85); color: #f0d36a; font-size: 11px; font-weight: 800;
+      letter-spacing: 0.06em; flex: 0 0 auto; background: rgba(232, 197, 71, 0.08);
+    }
+    .np-ep { margin: 0; color: rgba(255,255,255,0.78); font-size: 12px; font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .np-stats {
+      display: flex;
+      flex-direction: row;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 10px;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid rgba(255,255,255,0.08);
+    }
+    .np-percent-block { display: flex; flex-direction: column; align-items: flex-start; }
+    .np-percent { font-size: 28px; font-weight: 800; line-height: 0.9; letter-spacing: -0.04em; color: rgba(255,255,255,0.82); font-variant-numeric: tabular-nums; }
+    .np-percent-label { margin-top: 3px; font-size: 10px; font-weight: 800; letter-spacing: 0.16em; color: rgba(255,255,255,0.42); }
+    .np-left { margin-top: 0; font-size: 11px; font-weight: 800; letter-spacing: 0.1em; color: rgba(255,255,255,0.72); text-align: right; }
     .poster { width: 38px; height: 56px; border-radius: 4px; object-fit: cover; background: var(--fill); border: 1px solid var(--line); flex: 0 0 auto; }
     .media-name { margin: 0; font-size: 15px; font-weight: 700; line-height: 1.2; }
-    .np-progress { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
-    .progress-bar { position: relative; height: 5px; border-radius: 99px; overflow: hidden; background: rgba(120, 120, 128, 0.28); }
-    .progress-fill { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--blue); }
-    .progress-meta { display: flex; justify-content: space-between; margin-top: 6px; color: var(--secondary); font-size: 11px; font-variant-numeric: tabular-nums; }
-    .skip-block { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); }
+    .skip-block { position: relative; z-index: 1; margin-top: 10px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.08); }
     .skip-list { display: flex; flex-direction: column; }
     .skip-row {
       display: flex; align-items: center; justify-content: space-between; gap: 12px;
@@ -98,9 +182,10 @@
     }
     .skip-kind {
       margin: 0; font-size: 11px; font-weight: 700; letter-spacing: 0.06em;
-      text-transform: uppercase; color: var(--blue);
+      text-transform: uppercase; color: rgba(240, 211, 106, 0.9);
     }
-    .skip-time { margin: 0; color: var(--secondary); font-size: 12px; font-variant-numeric: tabular-nums; }
+    .skip-time { margin: 0; color: rgba(255,255,255,0.55); font-size: 12px; font-variant-numeric: tabular-nums; }
+    .skip-block .caption { color: rgba(255,255,255,0.5); }
     .control { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; }
     .link { color: var(--blue); text-decoration: none; }
     .query { display: flex; gap: 6px; align-items: center; }
@@ -168,34 +253,38 @@
     <section id="playback-section" class="section">
       <p class="label">Now playing</p>
       <div class="np-card">
-        <div class="np-top">
+        <div id="np-bg" class="np-bg"></div>
+        <div class="np-wash"></div>
+        <div class="np-body">
+          <div class="np-main">
           <button id="poster-btn" class="np-poster-btn" type="button" aria-label="Open on Simkl">
             <img id="poster" class="np-poster" alt="">
           </button>
           <div class="np-copy">
-            <p id="media-kind" class="np-kind" hidden></p>
-            <p id="media-name" class="np-title">No active media</p>
-            <div id="media-chips" class="np-meta" hidden>
-              <span id="media-season" class="np-chip np-chip-season" hidden>
-                <span class="np-chip-label">Season</span>
-                <span id="media-season-value" class="np-chip-value"></span>
+            <div class="np-live-row">
+              <span id="np-live" class="np-live" hidden>
+                <span class="np-live-dot"></span>
+                <span id="np-live-label">Now Watching</span>
               </span>
-              <span id="media-episode" class="np-chip np-chip-episode" hidden>
-                <span class="np-chip-label">Episode</span>
-                <span id="media-episode-value" class="np-chip-value"></span>
-              </span>
-              <span id="media-status" class="np-status" data-state="idle" hidden></span>
+              <p id="np-started" class="np-started"></p>
             </div>
-            <p id="media-episode-title" class="np-ep" hidden></p>
-            <p id="media-year" class="np-year" hidden></p>
-            <p id="media-empty" class="meta">Load a movie or episode.</p>
+            <div class="np-title-row">
+              <p id="media-name" class="np-title">No active media</p>
+              <p id="media-year" class="np-year" hidden></p>
+            </div>
+            <div id="np-meta" class="np-meta" hidden>
+              <span id="np-ep-pill" class="np-ep-pill" hidden></span>
+              <p id="media-episode-title" class="np-ep"></p>
+            </div>
+            <p id="media-empty" class="np-started">Load a movie or episode.</p>
           </div>
-        </div>
-        <div id="np-progress" class="np-progress" hidden>
-          <div class="progress-bar"><div id="progress-fill" class="progress-fill"></div></div>
-          <div class="progress-meta">
-            <span id="progress-left">0%</span>
-            <span id="progress-right">00:00 / 00:00</span>
+          </div>
+          <div id="np-stats" class="np-stats" hidden>
+            <div class="np-percent-block">
+              <div id="np-percent" class="np-percent">0%</div>
+              <div class="np-percent-label">WATCHED</div>
+            </div>
+            <div id="np-left" class="np-left"></div>
           </div>
         </div>
         <div id="skip-intro-block" class="skip-block" hidden>
@@ -247,7 +336,7 @@
       var state = {
         scrobblingEnabled: true,
         auth: { state: "disconnected", summary: "", detail: "", busy: false, connected: false, userCode: "", verificationUrl: "", user: null },
-        playback: { available: false, unmatched: false, mediaLabel: "", filename: "", title: "", kind: "", kindLabel: "", year: null, season: null, number: null, seasonChip: "", episodeChip: "", episodeCode: "", episodeTitle: "", url: "", posterUrl: "", state: "idle", progress: 0, position: 0, duration: 0 },
+        playback: { available: false, unmatched: false, mediaLabel: "", filename: "", title: "", kind: "", kindLabel: "", year: null, season: null, number: null, seasonChip: "", episodeChip: "", episodeCode: "", episodePill: "", episodeTitle: "", url: "", posterUrl: "", state: "idle", progress: 0, position: 0, duration: 0, remainingLabel: "", startedLabel: "" },
         scrobble: { status: "idle", verb: "", action: "", mediaLabel: "", detail: "", reason: "" },
         correction: { active: false, busy: false, query: "", error: "", results: [] },
         app: { version: "" }
@@ -304,21 +393,78 @@
       function $(id) { return document.getElementById(id); }
       function setText(id, value) { var node = $(id); if (node) node.textContent = value || ""; }
       function setHidden(id, hidden) { var node = $(id); if (node) node.hidden = !!hidden; }
-      function chipNumber(value) {
-        var n = Math.floor(Number(String(value).replace(/^0+/, "") || 0));
-        if (!isFinite(n) || n < 0) n = 0;
-        return n;
+      function liveChip(scrobble, playback) {
+        var status = scrobble || {};
+        if (playback && playback.unmatched) return { label: "Unmatched", state: "error" };
+        if (status.status === "waiting" || status.status === "sending") {
+          return { label: "Updating", state: status.status === "sending" ? "sending" : "waiting" };
+        }
+        if (status.status === "succeeded" && status.action === "scrobble") return { label: "Watched", state: "watching" };
+        if (playback && playback.state === "playing") return { label: "Now Watching", state: "watching" };
+        if (playback && playback.state === "paused") return { label: "Paused", state: "paused" };
+        if (status.status === "succeeded" && status.verb === "start") return { label: "Now Watching", state: "watching" };
+        if (status.status === "succeeded" && status.verb === "pause") return { label: "Paused", state: "paused" };
+        if (status.status === "succeeded" && status.verb === "stop") return { label: "Stopped", state: "stopped" };
+        if (status.status === "succeeded") return { label: "Now Watching", state: "watching" };
+        if (status.status === "unmatched") return { label: "Unmatched", state: "error" };
+        if (status.status === "failed") return { label: "Error", state: "error" };
+        if (status.status === "disabled") return { label: "Off", state: "off" };
+        if (status.status === "ready") return { label: "Ready", state: "ready" };
+        if (playback && playback.state === "paused") return { label: "Paused", state: "paused" };
+        if (playback && playback.state === "playing") return { label: "Now Watching", state: "watching" };
+        return { label: "", state: "" };
+      }
+      function pad2(value) {
+        var n = Math.max(0, Math.floor(Number(value) || 0));
+        return n < 10 ? "0" + n : String(n);
+      }
+      function episodePill(payload) {
+        if (!payload || payload.kind === "movie") return "";
+        if (payload.episodePill) return String(payload.episodePill);
+        var ep = payload.number != null ? Number(payload.number) : 0;
+        if ((!ep || !isFinite(ep)) && payload.episodeChip) ep = Number(payload.episodeChip);
+        if (!isFinite(ep) || ep <= 0) return "";
+        ep = Math.floor(ep);
+        if (payload.kind === "anime") return "Ep. " + ep;
+        var season = Number(payload.season != null ? payload.season : payload.seasonChip);
+        if (isFinite(season) && season > 0) return "S" + pad2(season) + "E" + pad2(ep);
+        var code = String(payload.episodeCode || "").trim();
+        return code || "Ep. " + ep;
+      }
+      function formatElapsed(totalSeconds) {
+        var sec = Math.max(0, Math.floor(Number(totalSeconds || 0)));
+        if (sec < 60) return "Elapsed " + sec + "s";
+        var min = Math.floor(sec / 60);
+        var rem = sec % 60;
+        if (min < 60) {
+          if (!rem) return "Elapsed " + min + "m";
+          return "Elapsed " + min + "m " + rem + "s";
+        }
+        var hours = Math.floor(min / 60);
+        min = min % 60;
+        if (!min && !rem) return "Elapsed " + hours + "h";
+        if (!rem) return "Elapsed " + hours + "h " + min + "m";
+        return "Elapsed " + hours + "h " + min + "m " + rem + "s";
+      }
+      function formatRemaining(totalSeconds) {
+        var value = Math.max(0, Number(totalSeconds || 0));
+        if (!isFinite(value)) return "";
+        var minutes = Math.max(0, Math.ceil(value / 60));
+        var hours = Math.floor(minutes / 60);
+        minutes = minutes % 60;
+        if (hours > 0) {
+          if (minutes) return hours + "H " + minutes + "M LEFT";
+          return hours + "H LEFT";
+        }
+        return minutes + "M LEFT";
+      }
+      function safePosterUrl(url) {
+        var posterUrl = String(url || "");
+        if (/^https:\/\/wsrv\.nl\//.test(posterUrl) && !/["')\\\s]/.test(posterUrl)) return posterUrl;
+        return "https://wsrv.nl/?url=https://simkl.in/poster_no_pic_c.png";
       }
       function titleCase(value) {
         return String(value || "").replace(/[_-]+/g, " ").replace(/\b[a-z]/g, function (ch) { return ch.toUpperCase(); });
-      }
-      function formatDuration(total) {
-        var value = Math.max(0, Math.floor(Number(total || 0)));
-        var h = Math.floor(value / 3600);
-        var m = Math.floor((value % 3600) / 60);
-        var s = value % 60;
-        function pad(n) { return n < 10 ? "0" + n : String(n); }
-        return h ? pad(h) + ":" + pad(m) + ":" + pad(s) : pad(m) + ":" + pad(s);
       }
       function bind(id, fn) {
         var node = $(id);
@@ -356,61 +502,75 @@
         setHidden("bottom", !connected);
         var poster = $("poster");
         var posterBtn = $("poster-btn");
-        var statusChip = $("media-status");
-        var playState = playback.unmatched ? "unmatched" : (playback.state || "idle");
-        var statusLabel = playback.unmatched ? "Unmatched" : titleCase(playState);
+        var live = $("np-live");
+        var epPill = $("np-ep-pill");
+        var npBg = $("np-bg");
+        var chip = liveChip(scrobble, playback);
         if (playback.available) {
-          setText("media-kind", playback.kindLabel || titleCase(playback.kind));
-          setHidden("media-kind", !(playback.kindLabel || playback.kind));
           setText("media-name", playback.title || playback.mediaLabel || "Unknown title");
-          var seasonN = chipNumber(playback.seasonChip || playback.season);
-          var episodeN = chipNumber(playback.episodeChip || playback.number);
-          var seasonChip = seasonN ? String(seasonN) : "";
-          var episodeChip = episodeN ? String(episodeN) : "";
-          if (!episodeChip) seasonChip = "";
-          setText("media-season-value", seasonChip);
-          setHidden("media-season", !seasonChip);
-          setText("media-episode-value", episodeChip);
-          setHidden("media-episode", !episodeChip);
-          setText("media-episode-title", playback.episodeTitle || "");
-          setHidden("media-episode-title", !playback.episodeTitle);
-          setHidden("media-year", !!playback.episodeCode || !playback.year);
-          setText("media-year", playback.year ? String(playback.year) : "");
+          if (playback.year) {
+            setHidden("media-year", false);
+            setText("media-year", "(" + playback.year + ")");
+          } else {
+            setHidden("media-year", true);
+            setText("media-year", "");
+          }
+          var pill = episodePill(playback);
+          if (pill) {
+            setHidden("np-meta", false);
+            setHidden("np-ep-pill", false);
+            setText("np-ep-pill", pill);
+            setText("media-episode-title", playback.episodeTitle || "");
+          } else {
+            setHidden("np-ep-pill", true);
+            setText("np-ep-pill", "");
+            setText("media-episode-title", "");
+            setHidden("np-meta", true);
+          }
           setHidden("media-empty", true);
-          poster.src = playback.posterUrl || "https://wsrv.nl/?url=https://simkl.in/poster_no_pic_c.png";
+          var posterUrl = safePosterUrl(playback.posterUrl);
+          poster.src = posterUrl;
           poster.hidden = false;
           if (posterBtn) posterBtn.hidden = false;
+          if (npBg) npBg.style.backgroundImage = 'url("' + posterUrl + '")';
         } else if (playback.unmatched) {
-          setHidden("media-kind", true);
           setText("media-name", playback.filename || "Unmatched file");
-          setHidden("media-season", true);
-          setHidden("media-episode", true);
-          setHidden("media-episode-title", true);
           setHidden("media-year", true);
+          setHidden("np-ep-pill", true);
+          setHidden("np-meta", true);
           setHidden("media-empty", true);
           poster.hidden = true;
           if (posterBtn) posterBtn.hidden = true;
+          if (npBg) npBg.style.backgroundImage = "";
         } else {
-          setHidden("media-kind", true);
           setText("media-name", "No active media");
-          setHidden("media-season", true);
-          setHidden("media-episode", true);
-          setHidden("media-episode-title", true);
           setHidden("media-year", true);
+          setHidden("np-ep-pill", true);
+          setHidden("np-meta", true);
           setHidden("media-empty", false);
           poster.hidden = true;
           if (posterBtn) posterBtn.hidden = true;
+          if (npBg) npBg.style.backgroundImage = "";
         }
-        statusChip.dataset.state = playState;
-        setText("media-status", statusLabel);
-        setHidden("media-status", !(playback.available || playback.unmatched));
-        setHidden("media-chips", $("media-season").hidden && $("media-episode").hidden && $("media-status").hidden);
-        setHidden("np-progress", !(playback.available || playback.unmatched || playback.duration));
+        if (!chip.label) {
+          live.hidden = true;
+          live.dataset.state = "";
+          setText("np-live-label", "");
+        } else {
+          live.hidden = false;
+          live.dataset.state = chip.state || "watching";
+          setText("np-live-label", chip.label);
+        }
+        setText("np-started", playback.available ? (playback.startedLabel || formatElapsed(playback.position)) : "");
+        setHidden("np-stats", !playback.available);
         if (posterBtn) posterBtn.dataset.open = playback.url ? "true" : "false";
-        var progress = Math.max(0, Math.min(100, Number(playback.progress || 0)));
-        $("progress-fill").style.width = progress + "%";
-        setText("progress-left", Math.round(progress) + "%");
-        setText("progress-right", formatDuration(playback.position) + " / " + formatDuration(playback.duration));
+        var progress = Math.max(0, Math.min(100, Math.round(Number(playback.progress || 0))));
+        setText("np-percent", progress + "%");
+        var remaining = playback.remainingLabel || "";
+        if (!remaining && playback.available) {
+          remaining = formatRemaining(Math.max(0, Number(playback.duration || 0) - Number(playback.position || 0)));
+        }
+        setText("np-left", remaining);
         var skipIntro = playback.skipIntro || {};
         var skipItems = skipIntro.items || [];
         var skipList = $("skip-intro-list");

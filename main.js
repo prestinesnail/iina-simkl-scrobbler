@@ -332,7 +332,7 @@ function overlayResumeDurationMs() {
 }
 
 function overlayShouldTrackHover() {
-  return !playbackIsPaused() && !!overlayNowPlaying && !overlayFading && overlayHideMode === "resume";
+  return false;
 }
 
 function overlayHideDelayMs(mode) {
@@ -340,31 +340,29 @@ function overlayHideDelayMs(mode) {
   return overlayDurationMs();
 }
 
+function resolveOverlayHideMode(mode) {
+  if (mode === "hold") return "hold";
+  if (mode === "resume") return "resume";
+  if (playbackIsPaused()) return "hold";
+  return mode || "start";
+}
+
 function armOverlayHideTimer(mode) {
   clearOverlayHideTimer();
-  overlayHideMode = mode || overlayHideMode || "start";
-  if (playbackIsPaused() || overlayHideMode === "hold") {
-    overlayHideMode = "hold";
-    return;
-  }
-  if (overlayHideMode === "resume" && overlayWindowHovered) return;
+  overlayHideMode = resolveOverlayHideMode(mode || overlayHideMode || "start");
+  if (overlayHideMode === "hold") return;
   var duration = overlayHideDelayMs(overlayHideMode);
   if (!duration) return;
   overlayHideTimer = setTimeout(function () {
     overlayHideTimer = null;
     if (!pluginAlive || windowClosing) return;
-    if (playbackIsPaused()) return;
-    if (overlayHideMode === "resume" && overlayWindowHovered) return;
+    if (overlayHideMode === "hold" || playbackIsPaused()) return;
     startOverlayFade();
   }, duration);
 }
 
 function noteOverlayHover(hovered) {
   overlayWindowHovered = !!hovered;
-  if (!overlayNowPlaying || overlayFading || playbackIsPaused()) return;
-  if (overlayHideMode !== "resume") return;
-  if (overlayWindowHovered) clearOverlayHideTimer();
-  else armOverlayHideTimer("resume");
 }
 
 function openSimklPage(url) {
@@ -413,6 +411,12 @@ function playerUiReady() {
 }
 
 function playbackIsPaused() {
+  try {
+    if (mpv && typeof mpv.getFlag === "function") {
+      var flag = mpv.getFlag("pause");
+      if (typeof flag === "boolean") return flag;
+    }
+  } catch (_error) {}
   try {
     return !!core.status.paused;
   } catch (_error) {
@@ -464,7 +468,7 @@ function bindOverlayMessages() {
     skipCurrentIntro();
   });
   overlayMessage("overlay-pause", function () {
-    if (core.status.paused) core.resume();
+    if (playbackIsPaused()) core.resume();
     else core.pause();
   });
   overlayMessage("overlay-dblclick", function () {
@@ -734,9 +738,10 @@ function presentNowPlayingOverlay(payload, mode) {
   overlayFading = false;
   overlayNowPlaying = payload;
   overlayShouldHide = false;
+  overlayWindowHovered = false;
   clearOverlayHideTimer();
   clearOverlayFadeTimer();
-  overlayHideMode = playbackIsPaused() || mode === "hold" ? "hold" : mode === "resume" ? "resume" : "start";
+  overlayHideMode = resolveOverlayHideMode(mode);
   if (!paintOverlay()) return false;
   var hideMs = overlayHideDelayMs(overlayHideMode);
   log(
@@ -1218,10 +1223,10 @@ async function syncPlaybackToSimkl(reason) {
   var alreadyStarted =
     playbackSession.lastSentAction === "start" || playbackSession.lastSentAction === "pause";
   await dispatch({
-    type: alreadyStarted || core.status.paused ? "seek" : "play",
+    type: alreadyStarted || playbackIsPaused() ? "seek" : "play",
     itemKey: media.mediaKey(match),
     progress: percent,
-    paused: !!core.status.paused,
+    paused: playbackIsPaused(),
   });
 }
 
@@ -1235,7 +1240,12 @@ function sourceSignature() {
 
 function overlayScrobbleChip() {
   if (!prefBool("status_osd", true)) return null;
-  return overlayCard.scrobbleChip(buildScrobbleSnapshot());
+  var chip = overlayCard.scrobbleChip(buildScrobbleSnapshot());
+  if (!chip || !chip.label) return chip;
+  var paused = playbackIsPaused();
+  if (chip.state === "paused" && !paused) return { label: "Now Watching", state: "watching" };
+  if (chip.state === "watching" && paused) return { label: "Paused", state: "paused" };
+  return chip;
 }
 
 function setScrobbleStatus(values) {
@@ -1293,13 +1303,15 @@ function showSidebarTab() {
 
 function playbackStateName() {
   if (core.status.idle) return "idle";
-  if (core.status.paused) return "paused";
+  if (playbackIsPaused()) return "paused";
   return "playing";
 }
 
 function buildSidebarPlayback() {
   var match = current.media;
   var overlayInfo = match && match.matched ? media.overlayPayload(match, titleLanguage()) : null;
+  var pos = finiteNumber(playbackPosition(), 0);
+  var dur = finiteNumber(core.status.duration || 0, 0);
   return {
     available: !!(match && match.matched),
     unmatched: !!(match && !match.matched),
@@ -1314,13 +1326,16 @@ function buildSidebarPlayback() {
     seasonChip: overlayInfo ? overlayInfo.seasonChip : "",
     episodeChip: overlayInfo ? overlayInfo.episodeChip : "",
     episodeCode: overlayInfo ? overlayInfo.episodeCode : "",
+    episodePill: overlayInfo ? overlayInfo.episodePill : "",
     episodeTitle: overlayInfo ? overlayInfo.episodeTitle : "",
     url: match && match.url ? match.url : "",
     posterUrl: overlayInfo ? overlayInfo.posterUrl : "",
     state: playbackStateName(),
     progress: finiteNumber(currentProgress(), 0),
-    position: finiteNumber(playbackPosition(), 0),
-    duration: finiteNumber(core.status.duration || 0, 0),
+    position: pos,
+    duration: dur,
+    remainingLabel: overlayCard.formatRemaining(Math.max(0, dur - pos)) || "",
+    startedLabel: overlayCard.formatElapsed(pos) || "",
     identifiedAt: current.identifiedAt,
     skipIntro: buildSkipIntroSidebar(),
   };
@@ -1521,6 +1536,7 @@ function fallbackSidebarSnapshot(auth) {
       seasonChip: "",
       episodeChip: "",
       episodeCode: "",
+      episodePill: "",
       episodeTitle: "",
       url: "",
       posterUrl: "",
@@ -1528,6 +1544,8 @@ function fallbackSidebarSnapshot(auth) {
       progress: 0,
       position: 0,
       duration: 0,
+      remainingLabel: "",
+      startedLabel: "",
     },
     scrobble: {
       status: "idle",
@@ -1639,7 +1657,7 @@ function playbackDispatchFields() {
   if (!isFinite(speed) || speed <= 0) speed = 1;
   return {
     progress: progress,
-    paused: !!core.status.paused,
+    paused: playbackIsPaused(),
     seeking: !!seeking,
     duration: duration,
     speed: speed,
@@ -1655,6 +1673,9 @@ function syncCurrentPlayback(reason) {
   }
   if (core.status.idle) return Promise.resolve();
   var fields = playbackDispatchFields();
+  if (lastHandledPause !== null && lastHandledPause !== fields.paused) {
+    return handlePauseChanged();
+  }
   var sent = dispatch(
     Object.assign(
       {
@@ -2024,7 +2045,7 @@ async function handlePlaybackStarted() {
   if (!current.media || current.path !== currentPath()) {
     await handleNewFile();
   }
-  if (core.status.paused) return;
+  if (playbackIsPaused()) return;
   var match = current.media;
   if (!match || !match.matched) return;
   await syncPlaybackToSimkl("playback-started");
@@ -2048,8 +2069,7 @@ async function handleSeekSettled() {
 }
 
 async function handlePauseChanged() {
-  if (seeking) return;
-  var paused = !!core.status.paused;
+  var paused = playbackIsPaused();
   if (lastHandledPause === paused) return;
   lastHandledPause = paused;
   var match = current.media;
@@ -2135,7 +2155,7 @@ function resyncCurrentPlayback(reason) {
   log(reason || "Re-syncing current playback with Simkl");
   playbackSession = sessionLib.createSession();
   lastHandledPause = null;
-  if (core.status.paused) {
+  if (playbackIsPaused()) {
     return dispatch({
       type: "play",
       itemKey: media.mediaKey(current.media),
@@ -2258,7 +2278,7 @@ async function applyCorrection(key) {
     loadSkipIntro(next).catch(function (error) {
       log("Skip intro load failed: " + errStr(error));
     });
-    if (!core.status.paused && !core.status.idle) {
+    if (!playbackIsPaused() && !core.status.idle) {
       await dispatch({
         type: "play",
         itemKey: media.mediaKey(next),

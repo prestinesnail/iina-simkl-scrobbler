@@ -1,9 +1,9 @@
 {
   "name": "SIMKL Scrobbler",
   "identifier": "io.github.prestinesnail.iina-simkl-scrobbler",
-  "version": "1.1.25",
+  "version": "1.1.26",
   "ghRepo": "prestinesnail/iina-simkl-scrobbler",
-  "ghVersion": 27,
+  "ghVersion": 28,
   "description": "Real-time Simkl scrobbling for movies, TV, and anime playing in IINA.",
   "author": {
     "name": "prestinesnail",
