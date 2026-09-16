@@ -693,9 +693,18 @@
       function pingReadyIfNeeded() {
         if (!hydrated) pingReady();
       }
-      document.addEventListener("visibilitychange", pingReadyIfNeeded);
+      function reportVisibility() {
+        send("sidebar_visibility", { visible: document.visibilityState !== "hidden" });
+      }
+      document.addEventListener("visibilitychange", function () {
+        pingReadyIfNeeded();
+        reportVisibility();
+      });
       window.addEventListener("focus", pingReadyIfNeeded);
       window.addEventListener("pageshow", pingReadyIfNeeded);
+      window.addEventListener("pagehide", function () {
+        send("sidebar_visibility", { visible: false });
+      });
     })();
   </script>
 </body>

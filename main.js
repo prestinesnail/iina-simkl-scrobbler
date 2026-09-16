@@ -17,7 +17,6 @@ var introdb = require("./introdb.js");
 
 var { core, event, file, http, menu, mpv, overlay, preferences, sidebar, utils } = iina;
 
-var PLUGIN_SIDEBAR_ID = "plugin:io.github.prestinesnail.iina-simkl-scrobbler";
 var UI_POLL_MS = 750;
 var current = {
   url: "",
@@ -35,6 +34,7 @@ var authChain = Promise.resolve();
 var sidebarHandlersBound = false;
 var sidebarLoaded = false;
 var sidebarWebviewReady = false;
+var pluginSidebarOpen = false;
 var sidebarFlushInFlight = false;
 var sidebarHydrateTimer = null;
 var overlayReady = false;
@@ -1288,14 +1288,21 @@ function showSidebarTab() {
     log("Waiting for the player window before showing the sidebar");
     return;
   }
+  if (pluginSidebarOpen) {
+    try {
+      if (sidebar && typeof sidebar.hide === "function") sidebar.hide();
+    } catch (error) {
+      log("sidebar.hide failed: " + errStr(error));
+    }
+    pluginSidebarOpen = false;
+    return;
+  }
   try {
     if (sidebar && typeof sidebar.show === "function") sidebar.show();
+    pluginSidebarOpen = true;
   } catch (error) {
     log("sidebar.show failed: " + errStr(error));
   }
-  try {
-    if (core.window) core.window.sidebar = PLUGIN_SIDEBAR_ID;
-  } catch (_error) {}
   readAuthActionFromPreferences();
   initializeSidebar();
   queueSidebarRefresh(true);
@@ -2304,6 +2311,9 @@ function bindSidebar() {
       }
     });
   }
+  sidebarMessage("sidebar_visibility", function (payload) {
+    pluginSidebarOpen = !!(payload && payload.visible);
+  });
   sidebarMessage("ready", function (payload) {
     var hydrated = !!(
       payload &&
@@ -2583,6 +2593,7 @@ event.on(
     sidebarLoaded = false;
     sidebarWebviewReady = false;
     sidebarHandlersBound = false;
+    pluginSidebarOpen = false;
     clearOsdHold();
     try {
       if (overlay && typeof overlay.hide === "function") overlay.hide();

@@ -146,6 +146,18 @@ function cleanedSearchName(name) {
   return base + (ext ? ext[0] : ".mkv");
 }
 
+function sequelFileQueries(name) {
+  var parsed = parseTitleFromFilename(name);
+  var hint = parseEpisodeHint(name);
+  if (!parsed.title || !hint || hint.season <= 1 || !hint.number) return [];
+  var ext = String(name || "").match(/\.[a-z0-9]{2,4}$/i);
+  ext = ext ? ext[0] : ".mkv";
+  return [
+    parsed.title + " S" + pad2(hint.season) + "E" + pad2(hint.number) + ext,
+    parsed.title + " Season " + hint.season + ext,
+  ];
+}
+
 function fileSearchQueries(url) {
   var path = extractPath(url);
   var filename = extractFilename(path);
@@ -153,6 +165,9 @@ function fileSearchQueries(url) {
   var parent = parts.length >= 2 ? parts[parts.length - 2] : "";
   var queries = [];
   var seen = {};
+  var sequelQueries = sequelFileQueries(filename);
+  var s;
+  for (s = 0; s < sequelQueries.length; s += 1) addSearchQuery(queries, seen, sequelQueries[s]);
   addSearchQuery(queries, seen, cleanedSearchName(filename));
   addSearchQuery(queries, seen, filename);
   if (parent) {
@@ -315,16 +330,28 @@ function firstUsableTitle() {
 
 function stripRedundantSeasonSuffix(title) {
   var text = cleanTitle(title);
-  var match = text.match(/^(.*?)(?:\s+season\s+(\d+))\s*$/i);
-  if (!match) return text;
-  var base = match[1].replace(/[.,;:\-–—]+$/, "").trim();
-  var season = Number(match[2]);
-  if (!base || !season) return text;
-  var roman = { 2: "ii", 3: "iii", 4: "iv", 5: "v", 6: "vi", 7: "vii", 8: "viii", 9: "ix", 10: "x" };
-  var numeral = roman[season];
-  if (numeral && new RegExp("(?:^|[\\s\\-])" + numeral + "$", "i").test(base)) return base;
-  if (new RegExp("\\b" + season + "(?:st|nd|rd|th)?\\s*season\\b", "i").test(base)) return base;
-  return text;
+  if (!text) return "";
+  var stripped = text
+    .replace(/\s+\d+(?:st|nd|rd|th)\s+season\s*$/i, "")
+    .replace(/\s+season\s+\d+\s*$/i, "")
+    .replace(/\s+s(?:eason)?\s*0*\d{1,2}\s*$/i, "")
+    .replace(/\s+第\d+期\s*$/, "")
+    .replace(/[.,;:\-–—]+$/, "")
+    .trim();
+  return stripped || text;
+}
+
+function formatYearLabel(yearStartEnd, year) {
+  var range = trim(yearStartEnd);
+  if (range) {
+    var parts = range.split("-");
+    var start = trim(parts[0] || "");
+    var end = trim(parts.length > 1 ? parts[1] : "");
+    if (start && end) return start + " - " + end;
+    if (start) return start;
+  }
+  if (year) return String(Math.floor(toNumber(year, 0)));
+  return "";
 }
 
 function collectEnglishTitle(source) {
@@ -356,7 +383,7 @@ function preferredTitle(item, language) {
   if (!item || !item.matched) return "";
   var mode = normalizeTitleLanguage(language);
   if (mode === "original") {
-    return firstUsableTitle(item.title, item.titleRomaji, item.catalogTitle, item.titleEn);
+    return stripRedundantSeasonSuffix(firstUsableTitle(item.title, item.titleRomaji, item.catalogTitle, item.titleEn));
   }
   var english = stripRedundantSeasonSuffix(firstUsableTitle(item.titleEn));
   if (english) return english;
@@ -492,6 +519,19 @@ function copyTitleYear(block) {
   return item;
 }
 
+function scrobbleIds(media) {
+  var ids = sanitizeIds(media && media.ids);
+  if (!media || media.kind !== "anime") return ids;
+  if (!isAnimeIds(ids) && !readSimklId(ids)) return ids;
+  var native = {};
+  if (readSimklId(ids)) native.simkl = readSimklId(ids);
+  for (var i = 0; i < ANIME_ID_KEYS.length; i += 1) {
+    var key = ANIME_ID_KEYS[i];
+    if (ids[key]) native[key] = ids[key];
+  }
+  return Object.keys(native).length ? native : ids;
+}
+
 function simklSection(kind) {
   if (kind === "movie") return "movies";
   if (kind === "anime") return "anime";
@@ -578,6 +618,7 @@ function createMedia(values) {
     titleEn: stripRedundantSeasonSuffix(cleanTitle(media.titleEn)),
     titleRomaji: cleanTitle(media.titleRomaji),
     year: media.year ? Math.floor(toNumber(media.year, 0)) : null,
+    yearLabel: trim(media.yearLabel) || formatYearLabel(media.yearStartEnd, media.year),
     season: season && season > 0 ? season : (kind === "movie" ? null : season),
     number: number && number > 0 ? number : (kind === "movie" ? null : number),
     fileSeason: fileSeason && fileSeason > 0 ? fileSeason : null,
@@ -739,9 +780,9 @@ function overlayPayload(item, language) {
   var number = displayNumber(item);
   var pill = overlayEpisodePill(item);
   return {
-    title: preferredTitle(item, language) || cleanTitle(item.title) || "",
+    title: preferredTitle(item, language) || stripRedundantSeasonSuffix(cleanTitle(item.title)) || "",
     kind: item.kind || "",
-    year: item.year || null,
+    year: item.yearLabel || item.year || null,
     season: isEpisode && item.kind !== "anime" ? season : null,
     number: isEpisode ? number : null,
     seasonChip: isEpisode && item.kind !== "anime" ? String(season) : "",
@@ -780,16 +821,24 @@ function scrobblePayload(media, progress) {
     return body;
   }
 
-  var wrapper = media.kind === "anime" ? "anime" : "show";
-  body[wrapper] = copyTitleYear(media);
+  var ids = scrobbleIds(media);
+  if (!Object.keys(ids).length) return null;
+
+  var block = copyTitleYear(media);
+  block.ids = ids;
+
+  if (media.kind === "anime" && (isAnimeIds(ids) || readSimklId(ids))) {
+    body.anime = block;
+    if (media.number) body.episode = { number: media.number };
+    return body;
+  }
+
+  body.show = block;
   if (media.number) {
-    var episode = { number: media.number };
-    var ids = media.ids || {};
-    var westernIds = !!(ids.tvdb || ids.tmdb || ids.imdb);
-    if (media.kind !== "anime" || westernIds) {
-      episode.season = media.season || 1;
-    }
-    body.episode = episode;
+    body.episode = {
+      season: media.fileSeason || media.season || 1,
+      number: media.number,
+    };
   }
   return body;
 }
@@ -812,6 +861,7 @@ function cacheRecord(media) {
     titleEn: media.titleEn,
     titleRomaji: media.titleRomaji,
     year: media.year,
+    yearLabel: media.yearLabel,
     season: media.season,
     number: media.number,
     fileSeason: media.fileSeason,
@@ -868,6 +918,7 @@ module.exports = {
   displaySeason: displaySeason,
   overlayEpisodePill: overlayEpisodePill,
   overlayPayload: overlayPayload,
+  formatYearLabel: formatYearLabel,
   stripRedundantSeasonSuffix: stripRedundantSeasonSuffix,
   needsEpisode: needsEpisode,
   pad2: pad2,
