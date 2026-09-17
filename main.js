@@ -1112,6 +1112,7 @@ function sessionOptions() {
     seekDebounceMs: sessionLib.DEFAULT_SEEK_DEBOUNCE_MS,
     lockMs: 20000,
     minProgress: 0.5,
+    minSeekDelta: sessionLib.DEFAULT_MIN_SEEK_DELTA,
   };
 }
 
@@ -1189,11 +1190,20 @@ function sleepMs(ms) {
 async function waitForReliableProgress() {
   var started = Date.now();
   var times = readPlaybackTimes();
+  var lastPercent = null;
+  var stableAt = 0;
   while (Date.now() - started < 4000) {
     times = readPlaybackTimes();
     if (times.duration > times.position + 2 && times.duration > 30) {
       var percent = currentProgress();
-      if (!(percent < 0.5 && times.position > 8)) return percent;
+      if (!(percent < 0.5 && times.position > 8)) {
+        if (lastPercent != null && Math.abs(percent - lastPercent) < 1.5) {
+          if (Date.now() - stableAt >= 700) return percent;
+        } else {
+          lastPercent = percent;
+          stableAt = Date.now();
+        }
+      }
     }
     await sleepMs(100);
   }
@@ -1222,12 +1232,17 @@ async function syncPlaybackToSimkl(reason) {
   log("Syncing Simkl from " + reason + " at " + Number(percent).toFixed(1) + "%");
   var alreadyStarted =
     playbackSession.lastSentAction === "start" || playbackSession.lastSentAction === "pause";
-  await dispatch({
-    type: alreadyStarted || playbackIsPaused() ? "seek" : "play",
-    itemKey: media.mediaKey(match),
-    progress: percent,
-    paused: playbackIsPaused(),
-  });
+  var fields = playbackDispatchFields();
+  fields.progress = percent;
+  await dispatch(
+    Object.assign(
+      {
+        type: alreadyStarted || fields.paused ? "seek" : "play",
+        itemKey: media.mediaKey(match),
+      },
+      fields
+    )
+  );
 }
 
 function currentPath() {
@@ -2072,7 +2087,7 @@ function noteSeeking() {
 
 async function handleSeekSettled() {
   log("Seek settled at " + Number(currentProgress() || 0).toFixed(1) + "%");
-  await syncCurrentPlayback("poll");
+  await syncCurrentPlayback("seek");
 }
 
 async function handlePauseChanged() {
@@ -2082,19 +2097,16 @@ async function handlePauseChanged() {
   var match = current.media;
   if (!match || !match.matched) return;
   showNowPlayingOverlay(match, true, paused ? "hold" : "resume");
-  if (paused) {
-    await dispatch({
-      type: "pause",
-      itemKey: media.mediaKey(match),
-      progress: currentProgress(),
-    });
-    return;
-  }
-  await dispatch({
-    type: "play",
-    itemKey: media.mediaKey(match),
-    progress: currentProgress(),
-  });
+  var fields = playbackDispatchFields();
+  await dispatch(
+    Object.assign(
+      {
+        type: paused ? "pause" : "play",
+        itemKey: media.mediaKey(match),
+      },
+      fields
+    )
+  );
 }
 
 async function handleEnded(completed) {

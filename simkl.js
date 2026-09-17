@@ -2,7 +2,7 @@ var media = require("./media.js");
 
 var API_ROOT = "https://api.simkl.com";
 var APP_NAME = "iina-simkl-scrobbler";
-var PLUGIN_VERSION = "1.1.27";
+var PLUGIN_VERSION = "1.1.28";
 var USER_AGENT = "iina-simkl-scrobbler/" + PLUGIN_VERSION;
 var TOKEN_PATH = "@data/simkl-token.json";
 var CACHE_PATH = "@data/simkl-match-cache.json";

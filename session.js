@@ -86,6 +86,23 @@ function result(session, send) {
   };
 }
 
+function progressJumped(session, event, now, settings, progress) {
+  if (event && event.ignoreSeek) return false;
+  var expected = expectedProgress(
+    session,
+    now,
+    event && event.duration,
+    event && event.paused,
+    event && event.speed
+  );
+  return Math.abs(Number(progress) - expected) >= settings.minSeekDelta;
+}
+
+function seekFollowupAction(event, session) {
+  if ((event && event.paused) || session.phase === "paused") return "pause";
+  return "start";
+}
+
 function sendAction(session, action, progress, now) {
   session.lastSentAt = now;
   session.lastSentAction = action;
@@ -120,12 +137,30 @@ function decide(session, event, now, options) {
   if (progress < 0) progress = 0;
   if (progress > 100) progress = 100;
 
-  if (type === "progress" || type === "seek") {
+  if (type === "progress") {
     next.lastProgress = progress;
     if (next.pendingAction === "start" || next.pendingAction === "pause") {
       next.pendingProgress = progress;
     }
     return result(next, null);
+  }
+
+  if (type === "seek") {
+    next.lastProgress = progress;
+    if (next.pendingAction === "start" || next.pendingAction === "pause") {
+      next.pendingProgress = progress;
+    }
+    if (next.phase !== "watching" && next.phase !== "paused") {
+      return result(next, null);
+    }
+    if (!progressJumped(next, event, now, settings, progress)) {
+      return result(next, null);
+    }
+    var seekAction = seekFollowupAction(event, next);
+    if (seekAction === "pause" && progress < settings.minProgress) {
+      return result(next, null);
+    }
+    return schedule(next, seekAction, progress, now, settings, settings.seekDebounceMs);
   }
 
   if (type === "file-change") {
@@ -173,10 +208,16 @@ function decide(session, event, now, options) {
     next.itemKey = itemKey;
     next.lastProgress = progress;
     if (next.pendingAction === "pause" && next.phase === "watching") {
+      if (progressJumped(next, event, now, settings, progress)) {
+        return schedule(next, "start", progress, now, settings, 0);
+      }
       clearPending(next);
       return result(next, null);
     }
     if (next.phase === "watching" && next.lastSentAction === "start") {
+      if (progressJumped(next, event, now, settings, progress)) {
+        return schedule(next, "start", progress, now, settings, 0);
+      }
       if (next.pendingAction === "start") next.pendingProgress = progress;
       else clearPending(next);
       return result(next, null);
@@ -192,6 +233,9 @@ function decide(session, event, now, options) {
     next.itemKey = itemKey;
     next.lastProgress = progress;
     if (next.phase === "paused" && next.lastSentAction === "pause") {
+      if (progressJumped(next, event, now, settings, progress)) {
+        return schedule(next, "pause", progress, now, settings, settings.pauseDebounceMs);
+      }
       clearPending(next);
       return result(next, null);
     }

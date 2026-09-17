@@ -80,7 +80,7 @@ Play a movie or episode in IINA. The plugin identifies the file, sends Simkl `st
 | Play a matched file | Simkl **Now Watching** starts; overlay appears |
 | Pause | Simkl saves a resume point and pauses Now Watching |
 | Resume | Simkl starts again at the current progress; overlay shows briefly |
-| Scrub / skip | **No Simkl call.** Local progress updates; the next pause or stop carries it |
+| Scrub / skip | Local overlay updates immediately. If the jump is large, a new Simkl `start` or `pause` is sent after the 20s lock so **Watching now** is not stuck interpolating from the old position |
 | Stop, close the window, quit IINA, or play the next file | Simkl `stop` — watched if progress is **80% or higher** |
 | Let the file end (≥ 95%) | Simkl `stop` at 100% |
 | Hover the player after the overlay fades | Overlay peeks back in |
@@ -91,7 +91,7 @@ If the wrong title is matched, open the sidebar (`⌘K`) and use **Correct match
 
 Simkl marks an item **watched** only on `stop` with progress ≥ 80. Pausing at 90% saves a resume point; it does not complete the watch.
 
-Playback POSTs happen only on play, pause, stop, close, and natural end — never on a timer and never on seek. Simkl interpolates **Watching now** progress from the item runtime between those events. That is required by [Simkl’s scrobble guide](https://api.simkl.org/guides/scrobble.md).
+Playback POSTs happen on play, pause, stop, close, natural end, and after a **large seek** once Simkl’s 20-second lock allows — never on a heartbeat timer. Small scrubs still wait for the next pause or stop. Simkl interpolates **Watching now** progress from the item runtime between those events. See [Simkl’s scrobble guide](https://api.simkl.org/guides/scrobble.md).
 
 ## How a video is identified
 
