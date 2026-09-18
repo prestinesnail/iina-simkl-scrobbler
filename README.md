@@ -1,6 +1,6 @@
 # SIMKL Scrobbler for IINA
 
-An [IINA](https://iina.io) plugin that scrobbles movies, TV, and anime to [Simkl](https://simkl.com) in real time, with a now-playing overlay and IntroDB skip buttons.
+An [IINA](https://iina.io) plugin that scrobbles movies, TV, and anime to [Simkl](https://simkl.com) in real time, with a now-playing overlay and skip buttons from IntroDB or file chapters.
 
 Requires **IINA 1.4.0** or later.
 
@@ -85,7 +85,7 @@ Play a movie or episode in IINA. The plugin identifies the file, sends Simkl `st
 | Let the file end (≥ 95%) | Simkl `stop` at 100% |
 | Hover the player after the overlay fades | Overlay peeks back in |
 | Click the overlay card | Opens the title on Simkl |
-| Skip Intro / Recap / Outro | Seeks to the end of that IntroDB segment |
+| Skip Intro / Recap / Outro / Preview | Seeks to the end of that IntroDB or file-chapter segment |
 
 If the wrong title is matched, open the sidebar (`⌘K`) and use **Correct match**. **Mark as Watched** in the plugin menu sends `stop` at 100% for the current title.
 
@@ -110,9 +110,9 @@ Episode numbers come from the filename (`S01E03`, `1x03`, anime `E01`) when Simk
 
 For sequel seasons that Simkl stores as season 1 of a new series, the overlay can show the filename season (for example `S02E06`) while the scrobble still uses Simkl’s season/episode IDs.
 
-## IntroDB
+## IntroDB and file chapters
 
-Skip buttons come from [IntroDB](https://introdb.app), not Simkl.
+Skip buttons prefer [IntroDB](https://introdb.app) timestamps. They do not come from Simkl.
 
 After a file is matched, the plugin reads the **IMDb ID** on that Simkl record and requests recap, intro, and outro timestamps:
 
@@ -120,9 +120,11 @@ After a file is matched, the plugin reads the **IMDb ID** on that Simkl record a
 GET https://api.introdb.app/segments?imdb_id=tt…&season=…&episode=…
 ```
 
-Season and episode are the numbers shown on the overlay (filename season when that differs from Simkl’s sequel numbering). Movies and matches without an IMDb ID skip this step.
+Season and episode are the numbers shown on the overlay (filename season when that differs from Simkl’s sequel numbering). Movies and matches without an IMDb ID skip the IntroDB request.
 
-When playback enters a segment (with a 1.5s lead-in), a **Skip Recap**, **Skip Intro**, or **Skip Outro** button appears. It fades after 5 seconds and stays clickable until that segment ends. Clicking seeks to the segment’s end. Turn this off with **Show Skip Intro / Recap / Outro buttons** in plugin settings. It also needs the Video Overlay permission.
+If IntroDB has no times for the episode (or there is no IMDb ID), the plugin reads **chapters in the playing file** and treats OP / Opening / Intro as intro, ED / Ending / Credits as outro, Recap / Previously as recap, and Preview / Next Episode as preview. Story chapters such as Prologue, Part A, and Part B are left alone. The sidebar lists those ranges and notes that they came from file chapters.
+
+When playback enters a segment (with a 1.5s lead-in), a **Skip Recap**, **Skip Intro**, **Skip Outro**, or **Skip Preview** button appears. It fades after 5 seconds and stays clickable until that segment ends. Clicking seeks to the segment’s end. Turn this off with **Show Skip Intro / Recap / Outro buttons** in plugin settings. It also needs the Video Overlay permission.
 
 ## APIs and hosts
 
@@ -176,7 +178,7 @@ No other sites are contacted. The plugin does not send the file contents, only a
 | Show now-playing overlay | on | Poster card when a title starts |
 | Overlay display length | 8 seconds | How long the card stays fully visible at start (1–30) |
 | Overlay length after resume | 2 seconds | Hide delay after unpause unless the pointer is over the player (1–30) |
-| Show Skip Intro / Recap / Outro | on | IntroDB skip buttons |
+| Show Skip Intro / Recap / Outro | on | IntroDB skip buttons, or OP/ED chapters in the file when IntroDB has none |
 | Track rewatches | off | On `stop` ≥ 80% of an already-finished title, log a separate viewing. Simkl Pro / VIP only. Never sent on play or pause |
 | Pause debounce | 400 ms | Ignore brief pauses from seeking (0–5000) |
 
@@ -192,4 +194,4 @@ Changes apply while the player window is open.
 
 ## License
 
-MIT. Movie, TV, and anime data from [Simkl](https://simkl.com). Skip timestamps from [IntroDB](https://introdb.app).
+MIT. Movie, TV, and anime data from [Simkl](https://simkl.com). Skip timestamps from [IntroDB](https://introdb.app), or from chapters in the playing file when IntroDB has none.

@@ -58,6 +58,7 @@ var overlaySkipFading = false;
 var skipHideTimer = null;
 var skipFadeTimer = null;
 var skipPollTimer = null;
+var chapterSkipRetryTimers = [];
 var skipIntro = createSkipIntroState();
 var sidebarDirty = false;
 var sidebarForceProfile = false;
@@ -123,6 +124,7 @@ function createSkipIntroState() {
     mediaKey: "",
     status: "idle",
     prompt: "hidden",
+    source: "",
     segments: [],
     active: null,
     dismissed: {},
@@ -822,10 +824,19 @@ function ensureSkipPoll() {
   skipPollTimer = setTimeout(skipTick, 250);
 }
 
+function clearChapterSkipRetries() {
+  if (!chapterSkipRetryTimers.length) return;
+  chapterSkipRetryTimers.forEach(function (timer) {
+    clearTimeout(timer);
+  });
+  chapterSkipRetryTimers = [];
+}
+
 function resetSkipIntro() {
   stopSkipPoll();
   clearSkipHideTimer();
   clearSkipFadeTimer();
+  clearChapterSkipRetries();
   skipIntro = createSkipIntroState();
   overlaySkipVisible = false;
   overlaySkipFading = false;
@@ -869,6 +880,7 @@ function stopRuntimeTimers() {
   stopSkipPoll();
   clearSkipHideTimer();
   clearSkipFadeTimer();
+  clearChapterSkipRetries();
 }
 
 function teardownPlugin() {
@@ -1026,73 +1038,178 @@ function tickSkipIntro() {
   showSkipPrompt(active);
 }
 
+function playbackDurationSec() {
+  var dur = finiteNumber(core.status.duration || 0, 0);
+  if (dur > 0) return dur;
+  try {
+    if (mpv && typeof mpv.getNumber === "function") {
+      var mpvDur = mpv.getNumber("duration");
+      if (isFinite(mpvDur) && mpvDur > 0) return mpvDur;
+    }
+  } catch (_error) {}
+  return 0;
+}
+
+function playbackChapters() {
+  var list = [];
+  try {
+    if (core && typeof core.getChapters === "function") {
+      list = core.getChapters() || [];
+    }
+  } catch (error) {
+    log("core.getChapters failed: " + errStr(error));
+  }
+  if ((!list || !list.length) && mpv && typeof mpv.getNative === "function") {
+    try {
+      var native = mpv.getNative("chapter-list");
+      if (Array.isArray(native)) list = native;
+    } catch (error) {
+      log("mpv chapter-list failed: " + errStr(error));
+    }
+  }
+  return Array.isArray(list) ? list : [];
+}
+
+function skipSegmentSignature(segments) {
+  return (segments || [])
+    .map(function (segment) {
+      return segment && segment.id ? String(segment.id) : "";
+    })
+    .join("|");
+}
+
+function activateSkipSegments(segments, source, summary) {
+  skipIntro.segments = segments || [];
+  skipIntro.source = source || "";
+  skipIntro.status = skipIntro.segments.length ? "ready" : "missing";
+  queueSidebarRefresh(false);
+  if (!skipIntro.segments.length) return false;
+  log(summary);
+  debugOsd(
+    skipIntro.segments
+      .map(function (segment) {
+        var name = segment.chapterTitle || segment.label;
+        return (
+          "Skip " +
+          name +
+          " " +
+          media.formatDuration(segment.startSec) +
+          "–" +
+          media.formatDuration(segment.endSec)
+        );
+      })
+      .join(" · ")
+  );
+  ensureSkipPoll();
+  tickSkipIntro();
+  return true;
+}
+
+function applyChapterSkipFallback() {
+  if (!isSkipIntroEnabled()) return false;
+  if (skipIntro.source === "introdb" && skipIntro.segments && skipIntro.segments.length) return false;
+  var segments = introdb.segmentsFromChapters(playbackChapters(), playbackDurationSec());
+  if (!segments.length) return false;
+  if (
+    skipIntro.source === "chapters" &&
+    skipSegmentSignature(skipIntro.segments) === skipSegmentSignature(segments)
+  ) {
+    return true;
+  }
+  return activateSkipSegments(
+    segments,
+    "chapters",
+    "Chapter skip segments: " +
+      segments
+        .map(function (segment) {
+          var name = segment.chapterTitle || segment.type;
+          return name + " " + segment.startSec + "s–" + segment.endSec + "s";
+        })
+        .join(", ")
+  );
+}
+
+function scheduleChapterSkipRetry(mediaKey) {
+  clearChapterSkipRetries();
+  [400, 1200, 3000].forEach(function (delayMs) {
+    var timer = setTimeout(function () {
+      if (!pluginAlive || windowClosing) return;
+      if (!current.media || media.mediaKey(current.media) !== mediaKey) return;
+      if (skipIntro.source === "introdb" && skipIntro.segments && skipIntro.segments.length) return;
+      applyChapterSkipFallback();
+    }, delayMs);
+    chapterSkipRetryTimers.push(timer);
+  });
+}
+
+function handleChapterListChanged() {
+  if (!pluginAlive || windowClosing) return;
+  if (!isSkipIntroEnabled()) return;
+  if (!current.media || !current.media.matched) return;
+  if (skipIntro.status === "loading") return;
+  if (skipIntro.source === "introdb" && skipIntro.segments && skipIntro.segments.length) return;
+  applyChapterSkipFallback();
+}
+
 async function loadSkipIntro(match) {
   resetSkipIntro();
   if (!isSkipIntroEnabled()) return;
   if (!match || !match.matched) return;
-  if (match.kind === "movie" || !match.number) return;
-  var imdbId = introdb.normalizeImdbId(match.ids && match.ids.imdb);
-  if (!imdbId) {
-    log("No IMDb ID on Simkl match; Skip Intro unavailable");
-    skipIntro.status = "no-imdb";
-    queueSidebarRefresh(false);
-    return;
-  }
-  var season = media.displaySeason(match);
-  var episode = media.displayNumber(match);
   var mediaKey = media.mediaKey(match);
   skipIntro.mediaKey = mediaKey;
   skipIntro.status = "loading";
-  try {
-    var segments = await introdb.fetchSegments({
-      imdbId: imdbId,
-      season: season,
-      episode: episode,
-    });
-    if (!current.media || media.mediaKey(current.media) !== mediaKey) return;
-    skipIntro.segments = segments || [];
-    skipIntro.status = skipIntro.segments.length ? "ready" : "missing";
-    queueSidebarRefresh(false);
-    if (!skipIntro.segments.length) {
+  queueSidebarRefresh(false);
+
+  var wantIntrodb = match.kind !== "movie" && !!match.number;
+  var imdbId = introdb.normalizeImdbId(match.ids && match.ids.imdb);
+  var fallbackStatus = "missing";
+
+  if (wantIntrodb && !imdbId) {
+    fallbackStatus = "no-imdb";
+    log("No IMDb ID on Simkl match; trying file chapters for Skip Intro");
+  } else if (wantIntrodb) {
+    var season = media.displaySeason(match);
+    var episode = media.displayNumber(match);
+    try {
+      var segments = await introdb.fetchSegments({
+        imdbId: imdbId,
+        season: season,
+        episode: episode,
+      });
+      if (!current.media || media.mediaKey(current.media) !== mediaKey) return;
+      if (segments && segments.length) {
+        activateSkipSegments(
+          segments,
+          "introdb",
+          "IntroDB segments for " +
+            imdbId +
+            " S" +
+            season +
+            "E" +
+            episode +
+            ": " +
+            segments
+              .map(function (segment) {
+                return segment.type + " " + segment.startSec + "s–" + segment.endSec + "s";
+              })
+              .join(", ")
+        );
+        return;
+      }
+      fallbackStatus = "missing";
       log("IntroDB has no skip segments for " + imdbId + " S" + season + "E" + episode);
-      return;
+    } catch (error) {
+      if (!current.media || media.mediaKey(current.media) !== mediaKey) return;
+      fallbackStatus = "error";
+      log("IntroDB fetch failed: " + errStr(error));
     }
-    log(
-      "IntroDB segments for " +
-        imdbId +
-        " S" +
-        season +
-        "E" +
-        episode +
-        ": " +
-        skipIntro.segments
-          .map(function (segment) {
-            return segment.type + " " + segment.startSec + "s–" + segment.endSec + "s";
-          })
-          .join(", ")
-    );
-    debugOsd(
-      skipIntro.segments
-        .map(function (segment) {
-          return (
-            "Skip " +
-            segment.label +
-            " " +
-            media.formatDuration(segment.startSec) +
-            "–" +
-            media.formatDuration(segment.endSec)
-          );
-        })
-        .join(" · ")
-    );
-    ensureSkipPoll();
-    tickSkipIntro();
-  } catch (error) {
-    if (!current.media || media.mediaKey(current.media) !== mediaKey) return;
-    skipIntro.status = "error";
-    queueSidebarRefresh(false);
-    log("IntroDB fetch failed: " + errStr(error));
   }
+
+  if (!current.media || media.mediaKey(current.media) !== mediaKey) return;
+  if (applyChapterSkipFallback()) return;
+  skipIntro.status = fallbackStatus;
+  queueSidebarRefresh(false);
+  scheduleChapterSkipRetry(mediaKey);
 }
 
 function queueFileWork(label, fn) {
@@ -1373,16 +1490,18 @@ function buildSkipIntroSidebar() {
     items = segments.map(function (segment) {
       return {
         type: segment.type,
-        label: segment.label,
+        label: segment.chapterTitle || segment.label,
         range: media.formatDuration(segment.startSec) + " – " + media.formatDuration(segment.endSec),
       };
     });
+    if (skipIntro.source === "chapters") detail = "From file chapters.";
   } else if (skipIntro.status === "no-imdb") detail = "No IMDb ID on this Simkl match.";
   else if (skipIntro.status === "missing") detail = "No IntroDB skip times for this episode.";
   else if (skipIntro.status === "error") detail = "Intro lookup failed.";
   return {
     status: skipIntro.status,
     enabled: isSkipIntroEnabled(),
+    source: skipIntro.source || "",
     detail: detail,
     items: items,
     prompt: skipIntro.prompt,
@@ -2583,6 +2702,26 @@ try {
   );
 } catch (error) {
   log("mpv.playback-restart listener not available: " + errStr(error));
+}
+try {
+  event.on(
+    "mpv.chapter-list.changed",
+    wrap("chapter-list.changed", function () {
+      handleChapterListChanged();
+    })
+  );
+} catch (error) {
+  log("mpv.chapter-list.changed listener not available: " + errStr(error));
+}
+try {
+  event.on(
+    "mpv.chapters.changed",
+    wrap("chapters.changed", function () {
+      handleChapterListChanged();
+    })
+  );
+} catch (error) {
+  log("mpv.chapters.changed listener not available: " + errStr(error));
 }
 event.on(
   "mpv.end-file",

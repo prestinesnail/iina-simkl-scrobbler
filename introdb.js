@@ -1,5 +1,5 @@
 var API_ROOT = "https://api.introdb.app";
-var USER_AGENT = "iina-simkl-scrobbler/1.1.28";
+var USER_AGENT = "iina-simkl-scrobbler/1.1.29";
 var SKIP_PROMPT_MS = 5000;
 var SKIP_LEAD_IN_SEC = 1.5;
 var MIN_REMAINING_SEC = 2;
@@ -77,11 +77,12 @@ function toSeconds(value, msValue) {
   return NaN;
 }
 
-var SEGMENT_TYPES = ["recap", "intro", "outro"];
+var SEGMENT_TYPES = ["recap", "intro", "outro", "preview"];
 var SEGMENT_LABELS = {
   recap: "Recap",
   intro: "Intro",
   outro: "Outro",
+  preview: "Preview",
 };
 
 function skipTypeLabel(type) {
@@ -90,6 +91,104 @@ function skipTypeLabel(type) {
 
 function skipButtonLabel(segment) {
   return "Skip " + skipTypeLabel(segment && segment.type);
+}
+
+function normalizeChapterTitle(title) {
+  return String(title == null ? "" : title)
+    .replace(/[_./]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function classifyChapterTitle(title) {
+  var text = normalizeChapterTitle(title);
+  if (!text) return null;
+  text = text.replace(/^\d{1,3}(?:[:.]\d{2}){0,2}\s+/, "");
+  text = text.replace(/^(?:chapter|ch|track|scene)\s*\d+\s*[:.\-]?\s*/, "");
+  if (!text) return null;
+
+  if (
+    /(?:^|[\s(\-])(?:recap|previously(?:\s+on)?|last\s+time)(?:\s*\d+)?(?:$|[\s)\-])/.test(text) ||
+    text.indexOf("前回") !== -1
+  ) {
+    return "recap";
+  }
+  if (
+    /(?:^|[\s(\-])(?:preview|next\s+episode|next\s+ep|coming\s+up|pv)(?:\s*\d+)?(?:$|[\s)\-])/.test(text) ||
+    text.indexOf("次回") !== -1 ||
+    text.indexOf("予告") !== -1
+  ) {
+    return "preview";
+  }
+  if (
+    /(?:^|[\s(\-])(?:nc)?op(?:\s*\d+)?(?:$|[\s)\-])/.test(text) ||
+    /(?:^|[\s(\-])(?:opening|intro)(?:\s*\d+)?(?:$|[\s)\-])/.test(text) ||
+    text.indexOf("オープニング") !== -1
+  ) {
+    return "intro";
+  }
+  if (
+    /(?:^|[\s(\-])(?:nc)?ed(?:\s*\d+)?(?:$|[\s)\-])/.test(text) ||
+    /(?:^|[\s(\-])(?:ending|outro|credits?|end\s+credits?|closing\s+credits?)(?:\s*\d+)?(?:$|[\s)\-])/.test(text) ||
+    text.indexOf("エンディング") !== -1
+  ) {
+    return "outro";
+  }
+  return null;
+}
+
+function chapterStartSec(chapter) {
+  if (!chapter || typeof chapter !== "object") return NaN;
+  if (chapter.start != null && chapter.start !== "") {
+    var start = Number(chapter.start);
+    if (isFinite(start)) return start;
+  }
+  if (chapter.time != null && chapter.time !== "") {
+    var time = Number(chapter.time);
+    if (isFinite(time)) return time;
+  }
+  return NaN;
+}
+
+function segmentsFromChapters(chapters, durationSec) {
+  var raw = Array.isArray(chapters) ? chapters : [];
+  var list = [];
+  var i;
+  for (i = 0; i < raw.length; i += 1) {
+    var start = chapterStartSec(raw[i]);
+    if (!isFinite(start) || start < 0) continue;
+    list.push({
+      title: raw[i] && raw[i].title != null ? String(raw[i].title) : "",
+      startSec: start,
+    });
+  }
+  list.sort(function (left, right) {
+    return left.startSec - right.startSec;
+  });
+
+  var duration = Number(durationSec);
+  var segments = [];
+  for (i = 0; i < list.length; i += 1) {
+    var type = classifyChapterTitle(list[i].title);
+    if (!type) continue;
+    var end = i + 1 < list.length ? list[i + 1].startSec : duration;
+    if (!isFinite(end) || end <= list[i].startSec) continue;
+    if (end - list[i].startSec < MIN_REMAINING_SEC) continue;
+    segments.push({
+      id: type + ":chapter:" + list[i].startSec + "-" + end,
+      type: type,
+      label: skipTypeLabel(type),
+      chapterTitle: String(list[i].title || "").trim(),
+      startSec: list[i].startSec,
+      endSec: end,
+      source: "chapters",
+    });
+  }
+  segments.sort(function (left, right) {
+    return left.startSec - right.startSec;
+  });
+  return segments;
 }
 
 function parseSegment(source, type) {
@@ -344,6 +443,8 @@ module.exports = {
   SKIP_LEAD_IN_SEC: SKIP_LEAD_IN_SEC,
   SKIP_PROMPT_MS: SKIP_PROMPT_MS,
   activeSegment: activeSegment,
+  chapterStartSec: chapterStartSec,
+  classifyChapterTitle: classifyChapterTitle,
   clearCache: clearCache,
   configure: configure,
   fetchIntro: fetchIntro,
@@ -354,10 +455,12 @@ module.exports = {
   inIntroWindow: inIntroWindow,
   introCacheKey: introCacheKey,
   introRequestUrl: introRequestUrl,
+  normalizeChapterTitle: normalizeChapterTitle,
   normalizeImdbId: normalizeImdbId,
   parseIntroResponse: parseIntroResponse,
   parseSegment: parseSegment,
   parseSegmentsResponse: parseSegmentsResponse,
+  segmentsFromChapters: segmentsFromChapters,
   segmentsRequestUrl: segmentsRequestUrl,
   skipButtonLabel: skipButtonLabel,
   skipTypeLabel: skipTypeLabel,
