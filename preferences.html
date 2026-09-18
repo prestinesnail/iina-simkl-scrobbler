@@ -32,7 +32,7 @@
       Show scrobble status on the now-playing overlay
     </label>
     <p class="small secondary pref-help">
-      Shows Now Watching, percent watched, and time left on the bottom-left overlay. It stays visible while paused. After resume it hides unless you are hovering the player. Click the card to open the title on Simkl. No top-left popup.
+      Shows Now Watching, percent watched, and time left on the overlay. It stays visible while paused. After resume it hides unless you are hovering the player. Click the card to open the title on Simkl. No top-left popup.
     </p>
   </div>
 
@@ -105,6 +105,28 @@
   </div>
 
   <div class="pref-section">
+    Overlay position
+    <div style="margin-top: 2px">
+      <select id="overlay-position" style="width: 180px">
+        <option value="top-left">Top-Left</option>
+        <option value="bottom-left">Bottom-Left</option>
+        <option value="top-right">Top-Right</option>
+        <option value="bottom-right">Bottom-Right</option>
+        <option value="top-center">Top-Center</option>
+      </select>
+    </div>
+    <p class="small secondary pref-help" style="margin-top: 8px; margin-bottom: 4px">
+      Overlay offset (px)
+    </p>
+    <div>
+      <input type="number" data-type="int" data-pref-key="overlay_offset_px" min="0" max="240" step="1" style="width: 120px">
+    </div>
+    <p class="small secondary pref-help">
+      Inset the poster card this many pixels from the chosen edge. Top-Center uses the offset from the top only. The Skip Intro button moves to the opposite corner so it does not cover the card. Range 0–240.
+    </p>
+  </div>
+
+  <div class="pref-section">
     <label>
       <input type="checkbox" data-type="bool" data-pref-key="skip_intro_enabled">
       Show Skip Intro / Recap / Outro buttons
@@ -154,6 +176,26 @@
     document.getElementById("connect").addEventListener("click", function () {
       requestAction("connect");
     });
+    (function bindOverlayPosition() {
+      var select = document.getElementById("overlay-position");
+      if (!select || !window.iina || !iina.preferences) return;
+      iina.preferences.get("overlay_position", function (value) {
+        var next = value == null || value === "" ? "bottom-left" : String(value);
+        if (
+          next !== "top-left" &&
+          next !== "bottom-left" &&
+          next !== "top-right" &&
+          next !== "bottom-right" &&
+          next !== "top-center"
+        ) {
+          next = "bottom-left";
+        }
+        select.value = next;
+      });
+      select.addEventListener("change", function () {
+        iina.preferences.set("overlay_position", select.value);
+      });
+    })();
   </script>
 </body>
 </html>

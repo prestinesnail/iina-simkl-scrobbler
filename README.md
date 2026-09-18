@@ -6,7 +6,7 @@ Requires **IINA 1.4.0** or later.
 
 ![Now-playing overlay showing Simkl watch progress](docs/now-playing-overlay.jpg)
 
-The overlay shows the matched title, live progress, and time left. Episode chips match Simkl: **S01E01** for TV, **Ep. 9** for anime, nothing for movies. Click the card to open the title on Simkl. Hover anywhere in the player after it fades to bring it back.
+The overlay shows the matched title, live progress, and time left. Episode chips match Simkl: **S01E01** for TV, **Ep. 9** for anime, nothing for movies. Click the card to open the title on Simkl. Hover anywhere in the player after it fades to bring it back. Plugin settings choose the card corner (Top-Left, Bottom-Left, Top-Right, Bottom-Right, or Top-Center) and a pixel inset; Skip Intro / Recap / Outro / Preview sits in the opposite corner so the two do not overlap.
 
 ## Install
 
@@ -178,6 +178,8 @@ No other sites are contacted. The plugin does not send the file contents, only a
 | Show now-playing overlay | on | Poster card when a title starts |
 | Overlay display length | 8 seconds | How long the card stays fully visible at start (1–30) |
 | Overlay length after resume | 2 seconds | Hide delay after unpause unless the pointer is over the player (1–30) |
+| Overlay position | Bottom-Left | Poster card corner: Top-Left, Bottom-Left, Top-Right, Bottom-Right, or Top-Center |
+| Overlay offset | 24 px | Inset from that edge (0–240). Skip Intro uses the opposite corner |
 | Show Skip Intro / Recap / Outro | on | IntroDB skip buttons, or OP/ED chapters in the file when IntroDB has none |
 | Track rewatches | off | On `stop` ≥ 80% of an already-finished title, log a separate viewing. Simkl Pro / VIP only. Never sent on play or pause |
 | Pause debounce | 400 ms | Ignore brief pauses from seeking (0–5000) |

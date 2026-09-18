@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html class="pos-bottom-left">
 <head>
   <meta charset="UTF-8">
   <style>
@@ -23,8 +23,6 @@
     }
     .np {
       position: absolute;
-      left: 3vmin;
-      bottom: calc(3vmin + var(--osc-clearance, 0px));
       z-index: 2;
       display: flex;
       align-items: stretch;
@@ -39,21 +37,53 @@
       box-shadow: 0 22px 60px rgba(0,0,0,0.55);
       overflow: hidden;
       opacity: 0;
-      transform: translateY(8px);
       pointer-events: none;
-      transition: opacity 0.55s ease, transform 0.55s ease, bottom 0.25s ease;
+      transition: opacity 0.55s ease, transform 0.55s ease, top 0.25s ease, right 0.25s ease, bottom 0.25s ease, left 0.25s ease;
+    }
+    html.pos-bottom-left .np {
+      left: var(--overlay-offset, 24px);
+      bottom: calc(var(--overlay-offset, 24px) + var(--osc-clearance, 0px));
+      transform: translateY(8px);
+    }
+    html.pos-bottom-right .np {
+      right: var(--overlay-offset, 24px);
+      bottom: calc(var(--overlay-offset, 24px) + var(--osc-clearance, 0px));
+      transform: translateY(8px);
+    }
+    html.pos-top-left .np {
+      left: var(--overlay-offset, 24px);
+      top: var(--overlay-offset, 24px);
+      transform: translateY(-8px);
+    }
+    html.pos-top-right .np {
+      right: var(--overlay-offset, 24px);
+      top: var(--overlay-offset, 24px);
+      transform: translateY(-8px);
+    }
+    html.pos-top-center .np {
+      left: 50%;
+      top: var(--overlay-offset, 24px);
+      transform: translate(-50%, -8px);
     }
     .np.visible {
       opacity: 1;
-      transform: translateY(0);
       pointer-events: auto;
     }
+    html.pos-bottom-left .np.visible,
+    html.pos-bottom-right .np.visible { transform: translateY(0); }
+    html.pos-top-left .np.visible,
+    html.pos-top-right .np.visible { transform: translateY(0); }
+    html.pos-top-center .np.visible { transform: translate(-50%, 0); }
     .np.visible.has-link { cursor: pointer; }
     .np.visible.fading {
       opacity: 0;
-      transform: translateY(0);
       pointer-events: auto;
     }
+    html.pos-bottom-left .np.visible.fading,
+    html.pos-bottom-right .np.visible.fading { transform: translateY(0); }
+    html.pos-top-left .np.visible.fading,
+    html.pos-top-right .np.visible.fading { transform: translateY(0); }
+    html.pos-top-center .np.visible.fading { transform: translate(-50%, 0); }
     .np.visible.fading.peek { opacity: 1; }
     .np-bg {
       position: absolute;
@@ -247,24 +277,47 @@
     }
     #skip-wrap {
       position: absolute;
-      right: 3vmin;
-      bottom: calc(3vmin + var(--osc-clearance, 0px));
       z-index: 3;
       visibility: hidden;
       opacity: 0;
+      transition: opacity 0.55s ease, transform 0.55s ease, visibility 0s linear 0.55s, top 0.25s ease, right 0.25s ease, bottom 0.25s ease, left 0.25s ease;
+    }
+    html.pos-bottom-left #skip-wrap,
+    html.pos-top-center #skip-wrap {
+      right: var(--overlay-offset, 24px);
+      bottom: calc(var(--overlay-offset, 24px) + var(--osc-clearance, 0px));
       transform: translateX(18px);
-      transition: opacity 0.55s ease, transform 0.55s ease, visibility 0s linear 0.55s;
+    }
+    html.pos-bottom-right #skip-wrap {
+      left: var(--overlay-offset, 24px);
+      bottom: calc(var(--overlay-offset, 24px) + var(--osc-clearance, 0px));
+      transform: translateX(-18px);
+    }
+    html.pos-top-left #skip-wrap {
+      right: var(--overlay-offset, 24px);
+      top: var(--overlay-offset, 24px);
+      transform: translateX(18px);
+    }
+    html.pos-top-right #skip-wrap {
+      left: var(--overlay-offset, 24px);
+      top: var(--overlay-offset, 24px);
+      transform: translateX(-18px);
     }
     #skip-wrap.visible {
       visibility: visible;
       opacity: 1;
-      transform: translateX(0);
       transition-delay: 0s;
+    }
+    html.pos-bottom-left #skip-wrap.visible,
+    html.pos-bottom-right #skip-wrap.visible,
+    html.pos-top-left #skip-wrap.visible,
+    html.pos-top-right #skip-wrap.visible,
+    html.pos-top-center #skip-wrap.visible {
+      transform: translateX(0);
     }
     #skip-wrap.visible.fading {
       visibility: visible;
       opacity: 0.16;
-      transform: translateX(0);
     }
     #skip-wrap.visible:hover,
     #skip-wrap.visible.fading:hover { opacity: 1; }
@@ -505,6 +558,26 @@
         else if (!fading) setWindowHovered(false);
       }
 
+      function applyLayout(state) {
+        var pos = String((state && state.position) || "bottom-left");
+        if (!/^(top-left|bottom-left|top-right|bottom-right|top-center)$/.test(pos)) pos = "bottom-left";
+        var offset = Number(state && state.offsetPx);
+        if (!isFinite(offset)) offset = 24;
+        if (offset < 0) offset = 0;
+        if (offset > 240) offset = 240;
+        var clearance = Math.max(0, Number(state && state.oscClearance || 0));
+        document.documentElement.style.setProperty("--overlay-offset", offset + "px");
+        document.documentElement.style.setProperty("--osc-clearance", clearance + "px");
+        document.documentElement.classList.remove(
+          "pos-top-left",
+          "pos-bottom-left",
+          "pos-top-right",
+          "pos-bottom-right",
+          "pos-top-center"
+        );
+        document.documentElement.classList.add("pos-" + pos);
+      }
+
       function applySkip(visible, fading, label) {
         skip.textContent = label || "Skip Intro";
         skipWrap.classList.toggle("visible", !!visible);
@@ -561,8 +634,7 @@
         });
         iina.onMessage("overlay-state", function (state) {
           state = state || {};
-          var clearance = Math.max(0, Number(state.oscClearance || 0));
-          document.documentElement.style.setProperty("--osc-clearance", clearance + "px");
+          applyLayout(state);
           applyNowPlaying(
             state.nowPlaying || null,
             !!state.nowPlayingFading,

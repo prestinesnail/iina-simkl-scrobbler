@@ -92,6 +92,7 @@ var oscClearancePx = 0;
 var oscLayoutCheckedAt = 0;
 var oscLayoutTimer = null;
 var overlayPlaybackPaintAt = 0;
+var lastOverlayLayoutSignature = "";
 var OSC_POSITION_BOTTOM = 2;
 var OSC_BOTTOM_CLEARANCE_PX = 48;
 
@@ -179,6 +180,8 @@ function refreshPrefCache() {
     "overlay_enabled",
     "overlay_seconds",
     "overlay_resume_seconds",
+    "overlay_position",
+    "overlay_offset_px",
     "skip_intro_enabled",
     "track_rewatches",
     "auth_action_kind",
@@ -331,6 +334,26 @@ function overlayResumeDurationMs() {
   var seconds = prefNumber("overlay_resume_seconds", 2);
   if (!isFinite(seconds) || seconds <= 0) seconds = 2;
   return Math.round(Math.min(30, Math.max(1, seconds)) * 1000);
+}
+
+function overlayPosition() {
+  return overlayCard.normalizeOverlayPosition(cachedPref("overlay_position"));
+}
+
+function overlayOffsetPx() {
+  return overlayCard.clampOverlayOffsetPx(
+    prefNumber("overlay_offset_px", overlayCard.DEFAULT_OVERLAY_OFFSET_PX)
+  );
+}
+
+function overlayLayoutSignature() {
+  return overlayPosition() + "|" + overlayOffsetPx() + "|" + Number(oscClearancePx || 0);
+}
+
+function maybeRepaintOverlayLayout() {
+  var next = overlayLayoutSignature();
+  if (next === lastOverlayLayoutSignature) return;
+  if (overlayLoaded) paintOverlay();
 }
 
 function overlayShouldTrackHover() {
@@ -603,10 +626,13 @@ function postOverlayState() {
       skip: !!(overlaySkipVisible || overlaySkipFading),
       skipFading: !!overlaySkipFading,
       skipLabel: skipIntro.label || "Skip Intro",
+      position: overlayPosition(),
+      offsetPx: overlayOffsetPx(),
       oscClearance: Number(oscClearancePx || 0),
       trackHover: overlayShouldTrackHover(),
     });
     if (!payload) return false;
+    lastOverlayLayoutSignature = overlayLayoutSignature();
     overlay.postMessage("overlay-state", payload);
     if (typeof overlay.setClickable === "function") {
       overlay.setClickable(!!overlaySkipVisible || !!overlayNowPlaying);
@@ -670,7 +696,11 @@ function finishHideOverlay() {
       scrobble: null,
       skip: false,
       skipFading: false,
+      position: overlayPosition(),
+      offsetPx: overlayOffsetPx(),
+      oscClearance: Number(oscClearancePx || 0),
     });
+    lastOverlayLayoutSignature = overlayLayoutSignature();
   } catch (_error) {}
   setOverlayOpacity(1);
 }
@@ -2273,6 +2303,7 @@ function readAuthActionFromPreferences() {
   if (!pluginAlive) return;
   refreshPrefCache();
   checkAuthActionRequest();
+  maybeRepaintOverlayLayout();
 }
 
 function startAuthActionPoll() {

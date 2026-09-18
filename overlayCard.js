@@ -13,15 +13,95 @@ function kindLabel(kind) {
 }
 
 var FADE_MS = 550;
+var OVERLAY_POSITIONS = ["top-left", "bottom-left", "top-right", "bottom-right", "top-center"];
+var DEFAULT_OVERLAY_POSITION = "bottom-left";
+var DEFAULT_OVERLAY_OFFSET_PX = 24;
+var MAX_OVERLAY_OFFSET_PX = 240;
+
+function normalizeOverlayPosition(value) {
+  var raw = String(value == null ? "" : value)
+    .trim()
+    .toLowerCase()
+    .replace(/[_\s]+/g, "-");
+  var i;
+  for (i = 0; i < OVERLAY_POSITIONS.length; i += 1) {
+    if (OVERLAY_POSITIONS[i] === raw) return raw;
+  }
+  return DEFAULT_OVERLAY_POSITION;
+}
+
+function clampOverlayOffsetPx(value) {
+  var n = Math.round(Number(value));
+  if (!isFinite(n)) n = DEFAULT_OVERLAY_OFFSET_PX;
+  return Math.max(0, Math.min(MAX_OVERLAY_OFFSET_PX, n));
+}
+
+function skipCornerForOverlay(position) {
+  var pos = normalizeOverlayPosition(position);
+  if (pos === "bottom-right") return "bottom-left";
+  if (pos === "top-left") return "top-right";
+  if (pos === "top-right") return "top-left";
+  if (pos === "top-center") return "bottom-right";
+  return "bottom-right";
+}
+
+function overlayInset(offsetPx, oscClearancePx, edge) {
+  var offset = clampOverlayOffsetPx(offsetPx);
+  var osc = Math.max(0, Number(oscClearancePx) || 0);
+  if (edge === "bottom") return offset + osc + "px";
+  return offset + "px";
+}
 
 function overlayCSS(options) {
   var fading = !!(options && options.fading);
   var skipFading = !!(options && options.skipFading);
   var fadeSec = FADE_MS / 1000 + "s ease";
+  var position = normalizeOverlayPosition(options && options.position);
+  var offsetPx = clampOverlayOffsetPx(options && options.offsetPx);
+  var osc = Math.max(0, Number(options && options.oscClearance) || 0);
+  var skipCorner = skipCornerForOverlay(position);
+  var npPos = [];
+  var skipPos = [];
+  if (position === "top-left") {
+    npPos.push("top: " + overlayInset(offsetPx, osc, "top") + ";", "left: " + overlayInset(offsetPx, osc, "left") + ";");
+  } else if (position === "top-right") {
+    npPos.push("top: " + overlayInset(offsetPx, osc, "top") + ";", "right: " + overlayInset(offsetPx, osc, "right") + ";");
+  } else if (position === "top-center") {
+    npPos.push(
+      "top: " + overlayInset(offsetPx, osc, "top") + ";",
+      "left: 50%;",
+      "transform: translate(-50%, " + (fading ? "0" : "-8px") + ");"
+    );
+  } else if (position === "bottom-right") {
+    npPos.push(
+      "bottom: " + overlayInset(offsetPx, osc, "bottom") + ";",
+      "right: " + overlayInset(offsetPx, osc, "right") + ";"
+    );
+  } else {
+    npPos.push(
+      "bottom: " + overlayInset(offsetPx, osc, "bottom") + ";",
+      "left: " + overlayInset(offsetPx, osc, "left") + ";"
+    );
+  }
+  if (skipCorner === "top-left") {
+    skipPos.push("top: " + overlayInset(offsetPx, osc, "top") + ";", "left: " + overlayInset(offsetPx, osc, "left") + ";");
+  } else if (skipCorner === "top-right") {
+    skipPos.push("top: " + overlayInset(offsetPx, osc, "top") + ";", "right: " + overlayInset(offsetPx, osc, "right") + ";");
+  } else if (skipCorner === "bottom-left") {
+    skipPos.push(
+      "bottom: " + overlayInset(offsetPx, osc, "bottom") + ";",
+      "left: " + overlayInset(offsetPx, osc, "left") + ";"
+    );
+  } else {
+    skipPos.push(
+      "bottom: " + overlayInset(offsetPx, osc, "bottom") + ";",
+      "right: " + overlayInset(offsetPx, osc, "right") + ";"
+    );
+  }
   return [
     "html, body { margin: 0; width: 100%; height: 100%; background: transparent !important; overflow: hidden; }",
     ".content { position: absolute; inset: 0; pointer-events: none; background: transparent; }",
-    ".np { position: absolute; left: 3vmin; bottom: calc(3vmin + var(--osc-clearance, 0px)); display: flex; align-items: stretch; gap: 16px;",
+    ".np { position: absolute; " + npPos.join(" ") + " display: flex; align-items: stretch; gap: 16px;",
     "min-width: 520px; max-width: 74vw; padding: 14px 18px 14px 14px; border-radius: 18px; color: #f6f7fb; overflow: hidden;",
     "background: rgba(8, 8, 12, 0.84); border: 1px solid rgba(255,255,255,0.12);",
     "box-shadow: 0 22px 60px rgba(0,0,0,0.55); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;",
@@ -39,7 +119,7 @@ function overlayCSS(options) {
     ".np-percent { font-size: 44px; font-weight: 800; color: rgba(255,255,255,0.82); }",
     ".np-percent-label { font-size: 12px; font-weight: 800; letter-spacing: 0.18em; color: rgba(255,255,255,0.42); }",
     ".np-left { font-size: 13px; font-weight: 800; letter-spacing: 0.12em; }",
-    ".skip { position: absolute; right: 3vmin; bottom: calc(3vmin + var(--osc-clearance, 0px)); z-index: 3; pointer-events: auto; appearance: none; cursor: pointer;",
+    ".skip { position: absolute; " + skipPos.join(" ") + " z-index: 3; pointer-events: auto; appearance: none; cursor: pointer;",
     "padding: 12px 22px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.28); color: #f6f7fb;",
     "background: rgba(8, 12, 20, 0.9); box-shadow: 0 16px 40px rgba(0,0,0,0.45);",
     "font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;",
@@ -185,8 +265,15 @@ function overlayHTML(payload, options) {
 }
 
 module.exports = {
+  DEFAULT_OVERLAY_OFFSET_PX: DEFAULT_OVERLAY_OFFSET_PX,
+  DEFAULT_OVERLAY_POSITION: DEFAULT_OVERLAY_POSITION,
   FADE_MS: FADE_MS,
+  MAX_OVERLAY_OFFSET_PX: MAX_OVERLAY_OFFSET_PX,
+  OVERLAY_POSITIONS: OVERLAY_POSITIONS,
+  clampOverlayOffsetPx: clampOverlayOffsetPx,
   escapeHtml: escapeHtml,
+  normalizeOverlayPosition: normalizeOverlayPosition,
+  skipCornerForOverlay: skipCornerForOverlay,
   formatElapsed: formatElapsed,
   formatRemaining: formatRemaining,
   kindLabel: kindLabel,
