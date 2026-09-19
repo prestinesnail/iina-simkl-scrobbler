@@ -10,9 +10,11 @@
       <input type="text" data-pref-key="simkl_client_id" style="width: 100%; margin-top: 2px" spellcheck="false">
     </div>
     <p class="small secondary pref-help">
-      Create a free app at
+      Leave this blank to use the plugin’s AUTH V2 app. To use your own, create a
+      <strong>Mobile, desktop &amp; browser</strong> app at
       <a href="https://simkl.com/settings/developer/new/">simkl.com/settings/developer</a>
-      and paste the <code>client_id</code> here. No client secret is required.
+      with redirect <code>http://127.0.0.1/callback</code> and paste that <code>client_id</code>.
+      No client secret. A V1 / older app ID will not work.
     </p>
   </div>
 
@@ -160,7 +162,7 @@
     <button id="show-sidebar" type="button">Open SIMKL sidebar</button>
     <button id="connect" type="button">Connect to Simkl</button>
     <p class="small secondary pref-help">
-      Authorization uses Simkl’s PIN flow. After clicking Connect, press ⌘K if the PIN does not appear. The sidebar shows a 5-character code to enter at simkl.com/pin.
+      Connect opens Simkl in your browser (OAuth 2.0 with PKCE). Approve access, then return to IINA. Existing users must reconnect once.
     </p>
   </div>
 

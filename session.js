@@ -207,6 +207,16 @@ function decide(session, event, now, options) {
   if (type === "play") {
     next.itemKey = itemKey;
     next.lastProgress = progress;
+    if (
+      next.lastSentAction === "start" &&
+      next.itemKey === itemKey &&
+      locked(next, now, settings.lockMs, "start")
+    ) {
+      if (progressJumped(next, event, now, settings, progress)) {
+        return schedule(next, "start", progress, now, settings, 0);
+      }
+      return result(next, null);
+    }
     if (next.pendingAction === "pause" && next.phase === "watching") {
       if (progressJumped(next, event, now, settings, progress)) {
         return schedule(next, "start", progress, now, settings, 0);

@@ -1,0 +1,40 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check version lockstep
+        run: bash scripts/check-version.sh
+
+      - name: Check tag matches Info.json
+        run: |
+          VERSION="$(python3 -c 'import json; print(json.load(open("Info.json"))["version"])')"
+          TAG="${GITHUB_REF_NAME#v}"
+          if [[ "$TAG" != "$VERSION" ]]; then
+            echo "Tag $GITHUB_REF_NAME does not match Info.json version $VERSION" >&2
+            exit 1
+          fi
+
+      - name: Package plugin
+        run: bash scripts/package.sh
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="$(python3 -c 'import json; print(json.load(open("Info.json"))["version"])')"
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$VERSION" \
+            --generate-notes \
+            "iina-simkl-scrobbler-${VERSION}.iinaplgz"

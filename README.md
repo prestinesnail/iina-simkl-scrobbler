@@ -29,13 +29,15 @@ Restart IINA. The plugin appears under **Settings → Plugins**. Quit IINA fully
 
 ## Setup
 
-1. Create a free Simkl app at [simkl.com/settings/developer/new](https://simkl.com/settings/developer/new/).
-2. Copy the **client ID**. Leave the client secret unused — this plugin uses PIN login, not a redirect URI.
-3. In IINA, open **Settings → Plugins → SIMKL Scrobbler → Settings** and paste the client ID.
-4. Click **Connect to Simkl**, or open the **SIMKL** sidebar (`⌘K`) and click **Connect**.
-5. Enter the 5-character PIN at [simkl.com/pin](https://simkl.com/pin/).
+1. In IINA, open **Settings → Plugins → SIMKL Scrobbler → Settings**. The plugin’s AUTH V2 client ID is already filled in. Leave it unless you want your own app.
+2. Click **Connect to Simkl**, or open the **SIMKL** sidebar (`⌘K`) and click **Connect**.
+3. Approve access in the browser window that opens (`https://simkl.com/oauth2/authorize`). After you allow it, a local page at `http://127.0.0.1/callback` confirms you can return to IINA.
 
-The access token is stored in the macOS keychain. A plaintext copy is written to plugin preferences and the plugin data folder only if the keychain write fails; successful keychain storage deletes those copies. Tokens last until you revoke the app in [Simkl Connected Apps](https://simkl.com/settings/connected-apps/).
+If you connected with an older plugin build, connect once more. Watch history stays on Simkl.
+
+To use your own Simkl app instead of the bundled one: register **Mobile, desktop & browser apps** (AUTH V2) at [simkl.com/settings/developer/new](https://simkl.com/settings/developer/new/). Set the redirect URL to exactly `http://127.0.0.1/callback` (no port). Paste that **client ID** into plugin settings. No client secret. An AUTH V1 app ID will not work.
+
+The access token and refresh token are stored in the macOS keychain. A plaintext copy is written to plugin preferences and the plugin data folder only if the keychain write fails; successful keychain storage deletes those copies. Access tokens last 7 days and are refreshed automatically; the refresh token lasts 180 days while you keep using the plugin. Sign-out revokes the grant. You can also remove the app in [Simkl Connected Apps](https://simkl.com/settings/connected-apps/).
 
 ![Plugin settings for client ID, overlay, skip intro, and Simkl connect](docs/plugin-settings.jpg)
 
@@ -51,7 +53,8 @@ IINA groups disk access and `utils.exec` under this permission. The plugin uses 
 - **Plugin temp folder (`@tmp`)** — short-lived curl header and JSON body files (mode 0600) so the Bearer token is not passed on the process command line.
 - **`/usr/bin/curl`** — JSON POST bodies (scrobble, file search). IINA’s HTTP helper form-encodes objects, which Simkl rejects.
 - **`/bin/chmod`** — restrict those temp files to the current user.
-- **`osascript`** — copy the PIN code to the clipboard when you click Copy.
+- **`/usr/bin/python3`** — PKCE challenge and a short-lived `127.0.0.1` callback server for Simkl’s browser sign-in.
+- **`osascript`** — copy the sign-in link to the clipboard when you click Copy.
 
 The plugin does not scan your library. It only sees the path of the file IINA is already playing, and it never sends file contents—only a filename (and optionally `parent/filename`) to Simkl.
 
@@ -61,9 +64,9 @@ Traffic is limited to the hosts in `Info.json` `allowedDomains`:
 
 | Host | Why |
 | --- | --- |
-| `api.simkl.com` | PIN login, file/title search, metadata, and `start` / `pause` / `stop` scrobbles |
+| `api.simkl.com` | Token exchange, file/title search, metadata, and `start` / `pause` / `stop` scrobbles |
 | `api.introdb.app` | Recap / intro / outro timestamps for Skip Intro |
-| `simkl.com` | PIN page (`/pin`) and “View on Simkl” / overlay click (https only) |
+| `simkl.com` | OAuth consent (`/oauth2/authorize`) and “View on Simkl” / overlay click (https only) |
 | `simkl.in` | Official poster files |
 | `wsrv.nl` | Simkl-recommended image proxy: resize, cache, and `&q=90` for overlay and sidebar posters |
 
@@ -98,7 +101,7 @@ Playback POSTs happen on play, pause, stop, close, natural end, and after a **la
 The plugin never hashes the file. It identifies from the **path and filename** IINA is playing.
 
 1. **Filename** — taken from the local path or `file://` URL. For some stream URLs, a `#/` filename hint is used instead of the CDN path. Scene tags (`[BluRay-1080p]`, `{imdb-tt…}`, `-GROUP`) are stripped before matching.
-2. **External IDs** — `{imdb-tt0126029}`, `{tmdb-…}`, and `{tvdb-…}` in the file or parent folder are looked up with `GET /search/id`. This is the usual Plex/Radarr movie folder layout.
+2. **External IDs** — `{imdb-tt0126029}`, `{tmdb-…}`, and `{tvdb-…}` in the file or parent folder are resolved with `GET /redirect` (Location header only; the 301 is not followed), then the cached title record. This is the usual Plex/Radarr movie folder layout. File and title search need a connected Simkl account.
 3. **Cache** — a trusted previous match for that file is reused. Failed matches are remembered for 30 minutes so a missing title is not re-queried every play. Network errors are not cached as “no match.”
 4. **Simkl file search** — `POST /search/file` with a cleaned `Title (Year).mkv`, then the raw basename and parent folder. Folder prefixes from your home directory are not sent.
 5. **Trust check** — the result must have a real catalog title and a Simkl ID. Garbage titles (`.`, empty, punctuation-only) are ignored.
@@ -134,18 +137,22 @@ The plugin only talks to hosts listed in `Info.json` `allowedDomains`.
 
 | Call | When |
 | --- | --- |
-| `GET /oauth/pin` | Start PIN login |
-| `GET /oauth/pin/{code}` | Poll until you authorize |
-| `POST /users/settings` | Load the connected account |
-| `POST /search/file` | Identify the playing file |
-| `GET /search/id` | Resolve `{imdb-tt…}` / `{tmdb-…}` / `{tvdb-…}` tags in the path |
-| `GET /search/movie`, `/search/tv`, `/search/anime` | Title-search fallback and Correct match |
-| `GET /movies/{id}`, `/tv/{id}`, `/anime/{id}` | Titles, poster, year, extra IDs |
+| Browser `https://simkl.com/oauth2/authorize` | Open Simkl consent with PKCE (`media:read media:write`) |
+| Local `http://127.0.0.1:{port}/callback` | Receive the authorization `code` (port is chosen at runtime) |
+| `POST /oauth2/token` | Exchange the code (and later refresh the 7-day access token) |
+| `POST /oauth2/revoke` | Sign-out |
+| `GET /users/settings` | Load the connected account |
+| `POST /search/file` | Identify the playing file (requires a user token) |
+| `GET /redirect` | Resolve `{imdb-tt…}` / `{tmdb-…}` / `{tvdb-…}` tags; read `Location`, do not follow |
+| `GET /search/movie`, `/search/tv`, `/search/anime` | Title-search fallback and Correct match (requires a user token) |
+| `GET /movies/{id}`, `/tv/{id}`, `/anime/{id}` | Titles, poster, year, extra IDs (no `Authorization`; Cloudflare-cached) |
 | `POST /scrobble/start` | Play or resume |
 | `POST /scrobble/pause` | Pause (resume point) |
 | `POST /scrobble/stop` | Stop, close, quit, or finished |
 
-Every request includes your public `client_id`, `app-name`, and `app-version`. Scrobble and account calls send `Authorization: Bearer` from the keychain. JSON POST bodies go through curl so they are sent as JSON (IINA’s HTTP helper form-encodes objects).
+Every request includes your public `client_id`, `app-name`, and `app-version`. Search, scrobble, and account calls send `Authorization: Bearer` from the keychain. Catalog detail lookups omit that header so Cloudflare can serve them. JSON POST bodies go through curl so they are sent as JSON (IINA’s HTTP helper form-encodes objects).
+
+Requests are sent one at a time. POSTs wait at least 1 second apart. A `429` with `rate_limit` is retried after about a second; a daily `user_limit_exceeded` is not retried. `400 RATE_LIMIT` is Simkl’s 20-second write lock, not a quota error.
 
 The plugin maps IINA/mpv events onto those scrobble calls. It does **not** poll Simkl for progress.
 
@@ -161,7 +168,7 @@ The plugin maps IINA/mpv events onto those scrobble calls. It does **not** poll 
 | --- | --- |
 | `https://simkl.in` | Official poster art |
 | `https://wsrv.nl` | Resize/proxy those posters (`_m` / `_c` + `&q=90`) for the overlay and sidebar |
-| `https://simkl.com` | PIN page, title pages, and “View on Simkl” (https only) |
+| `https://simkl.com` | OAuth consent, title pages, and “View on Simkl” (https only) |
 
 No other sites are contacted. The plugin does not send the file contents, only a filename (and optionally `parent/filename`) to Simkl.
 
@@ -169,7 +176,7 @@ No other sites are contacted. The plugin does not send the file contents, only a
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
-| Simkl client ID | empty | Public app id from your Simkl developer settings |
+| Simkl client ID | bundled AUTH V2 id | Public app id. Blank/default uses the plugin’s app; override with your own V2 desktop client ID |
 | Enable scrobbling | on | Master switch for Simkl POSTs |
 | Show scrobble status on overlay | on | Now Watching / Updating / Paused on the card |
 | OSD message length | 4 seconds | Remaining top-left OSD (Skip Intro confirmations, 1–15s) |
@@ -193,6 +200,20 @@ Changes apply while the player window is open.
 - **Toggle Scrobbling**
 - **Mark as Watched** — `stop` at 100% for the current title
 - **Preview Now Playing Overlay** / **Preview Skip Intro** — layout checks
+
+## Releasing
+
+Push a version tag. GitHub Actions packages the `.iinaplgz` and creates the GitHub release.
+
+```sh
+# bump Info.json version + ghVersion, simkl.js PLUGIN_VERSION, and introdb.js USER_AGENT
+git tag v1.1.31
+git push origin v1.1.31
+```
+
+The tag must match `Info.json` `version` (`v1.1.31` for `1.1.31`). IINA’s GitHub updater uses `ghVersion`, which must increase by 1 each release. The workflow attaches `iina-simkl-scrobbler-<version>.iinaplgz` to the release.
+
+To pack locally: `bash scripts/package.sh`
 
 ## License
 

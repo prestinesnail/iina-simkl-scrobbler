@@ -57,6 +57,7 @@
     h1 { margin: 0; font-size: 17px; letter-spacing: -0.02em; }
     .hero { color: var(--secondary); font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
     .hero[data-state="error"], .hero[data-state="missing_credentials"] { color: var(--red); }
+    .hero[data-state="legacy"] { color: var(--orange); }
     .section { padding: 10px 0 8px; border-top: 1px solid var(--line); }
     .label { margin: 0 0 6px; font-size: 10px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--tertiary); }
     .title { margin: 0; font-size: 15px; font-weight: 700; }
@@ -232,12 +233,12 @@
         <button id="connect" class="primary" type="button">Connect</button>
       </div>
       <div id="pin-box" class="code-box" hidden>
-        <p class="label">PIN code</p>
-        <div class="query">
-          <input id="pin-code" class="code-value" type="text" readonly spellcheck="false" aria-label="Simkl PIN">
+        <p class="label" id="pin-label">Sign in</p>
+        <div id="pin-code-row" class="query">
+          <input id="pin-code" class="code-value" type="text" readonly spellcheck="false" aria-label="Simkl sign-in">
           <button id="copy-pin" type="button">Copy</button>
         </div>
-        <p id="pin-note" class="caption">Enter this code at simkl.com/pin</p>
+        <p id="pin-note" class="caption">Approve access in your browser, then return to IINA.</p>
       </div>
       <div id="scrobble-control" class="control" hidden>
         <div>
@@ -482,17 +483,24 @@
         var correction = state.correction || {};
         var connected = !!auth.connected;
         $("hero").dataset.state = auth.state || "disconnected";
-        setText("hero", titleCase(auth.state === "authorizing" ? "waiting" : (auth.state || "disconnected")));
+        setText("hero", titleCase(auth.state === "authorizing" ? "waiting" : auth.state === "legacy" ? "reconnect" : (auth.state || "disconnected")));
         setText("auth-summary", auth.connected && auth.user && auth.user.name ? ("Signed in as " + auth.user.name) : (auth.summary || "Not connected"));
         setText("auth-detail", auth.detail || "");
         setHidden("auth-detail", !auth.detail);
         $("connect").hidden = connected;
         $("connect").disabled = !!auth.busy;
-        $("connect").textContent = auth.busy ? "Connecting…" : "Connect";
-        setHidden("pin-box", !auth.userCode);
+        $("connect").textContent = auth.busy ? "Connecting…" : auth.state === "legacy" ? "Reconnect" : "Connect";
+        var showAuthBox = !!(auth.userCode || (auth.busy && auth.verificationUrl));
+        setHidden("pin-box", !showAuthBox);
+        setHidden("pin-code-row", !auth.userCode);
         if (auth.userCode) {
+          setText("pin-label", "Device code");
           $("pin-code").value = auth.userCode;
-          setText("pin-note", "Enter this code at " + String(auth.verificationUrl || "simkl.com/pin").replace(/^https?:\/\//, ""));
+          setText("pin-note", "Approve this code at simkl.com/pin");
+        } else if (showAuthBox) {
+          setText("pin-label", "Browser sign-in");
+          $("pin-code").value = "";
+          setText("pin-note", "Approve access in your browser, then return to IINA.");
         }
         setHidden("scrobble-control", !connected);
         $("scrobble-toggle").setAttribute("aria-checked", state.scrobblingEnabled ? "true" : "false");

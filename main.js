@@ -1421,11 +1421,11 @@ function setScrobbleStatus(values) {
 function maybeRefreshProfile(force) {
   if (!simkl.getAuthStatus().connected) return;
   if (profileRefreshInFlight) return;
-  if (!force && simkl.getAuthStatus().user) return;
+  if (simkl.getAuthStatus().user) return;
   profileRefreshInFlight = true;
   Promise.resolve()
     .then(function () {
-      return simkl.getViewerProfile({ force: !!force });
+      return simkl.getViewerProfile({ force: false });
     })
     .then(function () {
       profileRefreshInFlight = false;
@@ -2003,6 +2003,9 @@ async function sendScrobble(action, progress, isRetry) {
     playbackSession = sessionLib.rollback(playbackSession, action);
     var skipDetail = "Skipped.";
     if (result.reason === "auth-required") skipDetail = "Connect Simkl to scrobble.";
+    if (result.reason === "legacy-auth") skipDetail = "Reconnect Simkl to continue scrobbling.";
+    if (result.reason === "quota-exceeded") skipDetail = "Simkl daily request limit reached. Try again after midnight US Eastern.";
+    if (result.reason === "insufficient-scope") skipDetail = "Reconnect Simkl and allow library updates.";
     if (result.reason === "missing-client-credentials") skipDetail = "Add your Simkl client ID in preferences.";
     if (result.reason === "missing-simkl-match") skipDetail = "This file was not identified.";
     if (result.reason === "missing-episode") skipDetail = "Pick the correct episode before scrobbling.";
@@ -2149,11 +2152,14 @@ async function identifyCurrentFile() {
     current.identifying = false;
     if (!match.matched) {
       if (core.status.title) match.title = String(core.status.title);
+      var unmatchedDetail = "Simkl could not identify this file. Use Correct Match.";
+      if (match.reason === "auth-required") unmatchedDetail = "Connect Simkl to identify titles.";
+      if (match.reason === "quota-exceeded") unmatchedDetail = "Simkl daily request limit reached. Try again after midnight US Eastern.";
       setScrobbleStatus({
         status: "unmatched",
         mediaLabel: filename,
-        detail: "Simkl could not identify this file. Use Correct Match.",
-        reason: "missing-simkl-match",
+        detail: unmatchedDetail,
+        reason: match.reason === "auth-required" || match.reason === "quota-exceeded" ? match.reason : "missing-simkl-match",
       });
       debugOsd("Unmatched: " + filename);
       resetSkipIntro();
@@ -2171,7 +2177,6 @@ async function identifyCurrentFile() {
     loadSkipIntro(match).catch(function (error) {
       log("Skip intro load failed: " + errStr(error));
     });
-    if (!core.status.idle) await syncPlaybackToSimkl("identify");
     return match;
   } catch (error) {
     current.identifying = false;
@@ -2193,7 +2198,8 @@ async function handleNewFile() {
   var signature = sourceSignature();
   var previous = current.media;
   var previousProgress = currentProgress();
-  if (lastSourceSignature && lastSourceSignature !== signature) {
+  var fileChanged = !!(lastSourceSignature && lastSourceSignature !== signature);
+  if (fileChanged) {
     await dispatch({
       type: "file-change",
       previousItemKey: previous && previous.matched ? media.mediaKey(previous) : "",
@@ -2202,12 +2208,14 @@ async function handleNewFile() {
     });
   }
   lastSourceSignature = signature;
-  trustedDuration = 0;
-  watchStartedAt = 0;
-  playbackSession = sessionLib.createSession();
-  correction = createCorrectionState();
-  lastOverlayKey = "";
-  resetSkipIntro();
+  if (fileChanged || !playbackSession || !playbackSession.itemKey) {
+    trustedDuration = 0;
+    watchStartedAt = 0;
+    playbackSession = sessionLib.createSession();
+    correction = createCorrectionState();
+    lastOverlayKey = "";
+    resetSkipIntro();
+  }
   await identifyCurrentFile();
 }
 
@@ -2346,29 +2354,41 @@ function resyncCurrentPlayback(reason) {
 
 async function runManualAuth(force) {
   showSidebarTab();
-  queueSidebarRefresh(true);
+  queueSidebarRefresh(false);
   var pending = simkl.beginInteractiveAuth({ force: !!force, restart: true });
-  queueSidebarRefresh(true);
+  queueSidebarRefresh(false);
   try {
     await pending;
     authResyncAt = Date.now();
-    queueSidebarRefresh(true);
-    await resyncCurrentPlayback("Starting scrobble after Simkl connect");
+    queueSidebarRefresh(false);
+    if (current.path) await identifyCurrentFile();
+    if (current.media && current.media.matched && !playbackIsPaused() && !core.status.idle) {
+      await syncPlaybackToSimkl("connect");
+    }
   } catch (error) {
     log("Auth failed: " + errStr(error));
     importantOsd(errStr(error));
-    queueSidebarRefresh(true);
+    queueSidebarRefresh(false);
   }
 }
 
 function handleSignOut() {
-  simkl.signOut();
-  watchStartedAt = 0;
-  playbackSession = sessionLib.createSession();
-  lastScrobble = createScrobbleStatus();
-  correction = createCorrectionState();
-  importantOsd("Signed out of Simkl");
-  queueSidebarRefresh(true);
+  authChain = authChain
+    .then(function () {
+      return simkl.signOut();
+    })
+    .then(function () {
+      watchStartedAt = 0;
+      playbackSession = sessionLib.createSession();
+      lastScrobble = createScrobbleStatus();
+      correction = createCorrectionState();
+      importantOsd("Signed out of Simkl");
+      queueSidebarRefresh(true);
+    })
+    .catch(function (error) {
+      log("Sign out failed: " + errStr(error));
+      queueSidebarRefresh(true);
+    });
 }
 
 function setScrobblingEnabled(enabled) {
