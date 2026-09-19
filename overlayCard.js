@@ -107,6 +107,7 @@ function overlayCSS(options) {
     ".np-copy { min-width: 0; flex: 1 1 auto; display: flex; flex-direction: column; justify-content: center; gap: 8px; }",
     ".np-live { display: inline-flex; align-items: center; gap: 7px; padding: 4px 10px 4px 8px; border: 1.5px solid #3ddc6c;",
     "border-radius: 8px; color: #6ef095; font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }",
+    '.np-live[data-state="skipped"] { border-color: #5ad0ff; color: #9ae4ff; }',
     ".np-title { margin: 0; font-size: 26px; font-weight: 700; line-height: 1.15; letter-spacing: -0.03em; }",
     ".np-year { color: rgba(255,255,255,0.48); font-size: 15px; }",
     ".np-ep-pill { display: inline-flex; padding: 3px 8px; border-radius: 6px; border: 1px solid rgba(232, 197, 71, 0.85); color: #f0d36a; font-size: 12px; font-weight: 800; letter-spacing: 0.06em; }",
@@ -115,12 +116,14 @@ function overlayCSS(options) {
     ".np-percent-label { font-size: 12px; font-weight: 800; letter-spacing: 0.18em; color: rgba(255,255,255,0.42); }",
     ".np-left { font-size: 13px; font-weight: 800; letter-spacing: 0.12em; }",
     ".skip { position: absolute; " + skipPos.join(" ") + " z-index: 3; pointer-events: auto; appearance: none; cursor: pointer;",
-    "padding: 12px 22px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.28); color: #f6f7fb;",
-    "background: rgba(8, 12, 20, 0.9); box-shadow: 0 16px 40px rgba(0,0,0,0.45);",
+    "display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px 8px 12px; border-radius: 8px;",
+    "border: 1.5px solid #e8c547; color: #f0d36a; background: rgba(18, 14, 6, 0.82);",
+    "box-shadow: 0 0 18px rgba(232, 197, 71, 0.42);",
     "font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;",
-    "font-size: 16px; font-weight: 700; letter-spacing: 0.02em; user-select: none;",
-    "opacity: " + (skipFading ? "0.16" : "1") + "; transition: opacity " + fadeSec + ", background 0.15s ease; }",
-    ".skip:hover { background: rgba(27, 111, 191, 0.92); }",
+    "font-size: 13px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; user-select: none;",
+    "opacity: " + (skipFading ? "0.16" : "1") + "; transition: opacity " + fadeSec + ", background 0.15s ease, box-shadow 0.15s ease; }",
+    ".skip:hover { background: rgba(36, 28, 10, 0.9); box-shadow: 0 0 22px rgba(232, 197, 71, 0.55); }",
+    ".skip-dot { width: 7px; height: 7px; border-radius: 50%; background: #e8c547; box-shadow: 0 0 8px rgba(232, 197, 71, 0.9); }",
   ].join(" ");
 }
 
@@ -247,7 +250,7 @@ function nowPlayingHTML(payload) {
 
 function skipIntroHTML() {
   return (
-    '<button class="skip" type="button" data-clickable onclick="iina.postMessage(\'skip-intro\')">Skip Intro</button>'
+    '<button class="skip" type="button" data-clickable onclick="iina.postMessage(\'skip-intro\')"><span class="skip-dot"></span><span>Skip Intro</span></button>'
   );
 }
 

@@ -179,6 +179,12 @@
       background: rgba(139, 139, 143, 0.12);
     }
     .np-live[data-state="off"] .np-live-dot { background: #8b8b8f; box-shadow: none; }
+    .np-live[data-state="skipped"] {
+      border-color: #5ad0ff;
+      color: #9ae4ff;
+      background: rgba(90, 208, 255, 0.12);
+    }
+    .np-live[data-state="skipped"] .np-live-dot { background: #5ad0ff; box-shadow: 0 0 8px rgba(90, 208, 255, 0.9); }
     .np-started {
       margin: 0;
       color: rgba(255,255,255,0.55);
@@ -315,24 +321,36 @@
     #skip-wrap.visible.fading:hover { opacity: 1; }
     #skip {
       appearance: none;
-      display: flex;
+      display: inline-flex;
       align-items: center;
       justify-content: center;
-      min-width: 168px;
-      padding: 14px 28px;
-      border: 0;
-      border-radius: 10px;
-      color: rgba(20, 20, 20, 0.92);
-      background: rgba(245, 245, 242, 0.9);
-      box-shadow: 0 18px 40px rgba(0, 0, 0, 0.32), inset 0 0 0 1px rgba(255, 255, 255, 0.7);
-      -webkit-backdrop-filter: blur(22px) saturate(140%);
-      backdrop-filter: blur(22px) saturate(140%);
-      font-size: 18px;
-      font-weight: 600;
-      letter-spacing: -0.01em;
+      gap: 8px;
+      padding: 8px 16px 8px 12px;
+      border: 1.5px solid #e8c547;
+      border-radius: 8px;
+      color: #f0d36a;
+      background: rgba(18, 14, 6, 0.82);
+      box-shadow: 0 0 18px rgba(232, 197, 71, 0.42);
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
       cursor: pointer;
       -webkit-user-select: none;
       user-select: none;
+    }
+    #skip:hover {
+      background: rgba(36, 28, 10, 0.9);
+      box-shadow: 0 0 22px rgba(232, 197, 71, 0.55);
+    }
+    .skip-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #e8c547;
+      box-shadow: 0 0 8px rgba(232, 197, 71, 0.9);
+      flex: 0 0 auto;
     }
   </style>
 </head>
@@ -366,7 +384,10 @@
     </div>
   </div>
   <div id="skip-wrap" data-clickable>
-    <button id="skip" type="button" data-clickable>Skip Intro</button>
+    <button id="skip" type="button" data-clickable>
+      <span class="skip-dot"></span>
+      <span id="skip-label">Skip Intro</span>
+    </button>
   </div>
   <script>
     (function () {
@@ -385,6 +406,7 @@
       var left = document.getElementById("np-left");
       var skipWrap = document.getElementById("skip-wrap");
       var skip = document.getElementById("skip");
+      var skipLabel = document.getElementById("skip-label");
       var hoverPad = document.getElementById("hover-pad");
       var peekTimer = null;
       var peekHoldMs = 2500;
@@ -571,7 +593,8 @@
       }
 
       function applySkip(visible, fading, label) {
-        skip.textContent = label || "Skip Intro";
+        if (skipLabel) skipLabel.textContent = label || "Skip Intro";
+        else skip.textContent = label || "Skip Intro";
         skipWrap.classList.toggle("visible", !!visible);
         skipWrap.classList.toggle("fading", !!visible && !!fading);
       }

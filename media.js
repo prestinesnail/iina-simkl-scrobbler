@@ -407,6 +407,24 @@ function applyTitleFallback(match, filename) {
   return match;
 }
 
+function applyEpisodeFromFilename(match, filename) {
+  if (!match || !match.matched) return match;
+  var name = String(filename || match.filename || "");
+  var hint = parseEpisodeHint(name);
+  var values = Object.assign({}, match, {
+    filename: name,
+    episodeTitle: "",
+    episodeIds: {},
+  });
+  if (match.kind !== "movie" && hint) {
+    values.season = hint.season;
+    values.number = hint.number;
+    values.fileSeason = hint.season;
+    values.fileNumber = hint.number;
+  }
+  return applyTitleFallback(createMedia(values), name);
+}
+
 function parseEpisodeHint(name) {
   var source = trim(name);
   if (!source) return null;
@@ -891,6 +909,7 @@ function mediaFromCache(record, filename) {
 
 module.exports = {
   ANIME_ID_KEYS: ANIME_ID_KEYS,
+  applyEpisodeFromFilename: applyEpisodeFromFilename,
   applyTitleFallback: applyTitleFallback,
   cacheRecord: cacheRecord,
   clampProgress: clampProgress,

@@ -86,20 +86,21 @@ Play a movie or episode in IINA. The plugin identifies the file, sends Simkl `st
 | Hover the player after the overlay fades | Overlay peeks back in |
 | Click the overlay card | Opens the title on Simkl |
 | Skip Intro / Recap / Outro / Preview | Seeks to the end of that IntroDB or file-chapter segment |
+| Intro or outro playing | Volume ducks to the setting percent (default 75%), then restores |
 
 If the wrong title is matched, open the sidebar (`⌘K`) and use **Correct match**. **Mark as Watched** in the plugin menu sends `stop` at 100% for the current title.
 
 Simkl marks an item **watched** only on `stop` with progress ≥ 80. Pausing at 90% saves a resume point; it does not complete the watch.
 
-Playback POSTs happen on play, pause, stop, close, natural end, and after a **large seek** once Simkl’s 20-second lock allows — never on a heartbeat timer. Small scrubs still wait for the next pause or stop. Simkl interpolates **Watching now** progress from the item runtime between those events. See [Simkl’s scrobble guide](https://api.simkl.org/guides/scrobble.md).
+Playback POSTs happen on play, pause, stop, close, natural end, and after a **large seek** once Simkl’s 20-second lock allows — never on a heartbeat timer. Small scrubs still wait for the next pause or stop. A playlist advance is one `stop` for the finished episode, then one `start` for the next — not overlapping lookups or extra 409 stops. Simkl interpolates **Watching now** progress from the item runtime between those events. See [Simkl’s scrobble guide](https://api.simkl.org/guides/scrobble.md).
 
 ## How a video is identified
 
 The plugin never hashes the file. It identifies from the **path and filename** IINA is playing.
 
 1. **Filename** — taken from the local path or `file://` URL. For some stream URLs, a `#/` filename hint is used instead of the CDN path. Scene tags (`[BluRay-1080p]`, `{imdb-tt…}`, `-GROUP`) are stripped before matching.
-2. **External IDs** — `{imdb-tt0126029}`, `{tmdb-…}`, and `{tvdb-…}` in the file or parent folder are resolved with `GET /redirect` (Location header only; the 301 is not followed), then the cached title record. This is the usual Plex/Radarr movie folder layout. File and title search need a connected Simkl account.
-3. **Cache** — a trusted previous match for that file is reused. Failed matches are remembered for 30 minutes so a missing title is not re-queried every play. Network errors are not cached as “no match.”
+2. **External IDs** — `{imdb-tt0126029}`, `{tmdb-…}`, and `{tvdb-…}` in the file or parent folder are resolved with `GET /redirect` (Location header only; the 301 is not followed), then the catalog record. Later episodes of the same show reuse that show-level cache (episode number still comes from the filename) so a playlist advance is `stop` then `start`, not another redirect. File and title search need a connected Simkl account.
+3. **Cache** — a trusted previous match for that file is reused. The show-level record is also reused across episodes that share an IMDb/TMDB/TVDB/Simkl ID. Failed matches are remembered for 30 minutes so a missing title is not re-queried every play. Network errors are not cached as “no match.”
 4. **Simkl file search** — `POST /search/file` with a cleaned `Title (Year).mkv`, then the raw basename and parent folder. Folder prefixes from your home directory are not sent.
 5. **Trust check** — the result must have a real catalog title and a Simkl ID. Garbage titles (`.`, empty, punctuation-only) are ignored.
 6. **Metadata** — `GET /movies/{id}`, `/tv/{id}`, or `/anime/{id}` fills English/romaji titles, year, poster, and extra IDs.
@@ -124,7 +125,9 @@ Season and episode are the numbers shown on the overlay (filename season when th
 
 If IntroDB has no times for the episode (or there is no IMDb ID), the plugin reads **chapters in the playing file** and treats OP / Opening / Intro as intro, ED / Ending / Credits as outro, Recap / Previously as recap, and Preview / Next Episode as preview. Story chapters such as Prologue, Part A, and Part B are left alone. The sidebar lists those ranges and notes that they came from file chapters.
 
-When playback enters a segment (with a 1.5s lead-in), a **Skip Recap**, **Skip Intro**, **Skip Outro**, or **Skip Preview** button appears. It fades after 5 seconds and stays clickable until that segment ends. Clicking seeks to the segment’s end. Turn this off with **Show Skip Intro / Recap / Outro buttons** in plugin settings. It also needs the Video Overlay permission.
+When playback enters a segment (with a 1.5s lead-in), a **Skip Recap**, **Skip Intro**, **Skip Outro**, or **Skip Preview** button appears. It fades after 5 seconds and stays clickable until that segment ends. Clicking seeks to the segment’s end. The now-playing card then shows **Skipped Intro** (or Recap / Outro / Preview) instead of a top-left OSD, so it does not cover a top-left overlay. Turn skip buttons off with **Show Skip Intro / Recap / Outro buttons** in plugin settings. They also need the Video Overlay permission.
+
+**Duck volume during intro and outro** (on by default) lowers IINA’s volume to a percent of the current level while an intro or outro is playing — default **75%** — then restores the previous volume when that segment ends. Recap and preview are not ducked. If you change volume while it is ducked, that new level is kept instead of restoring. The percent is in plugin settings.
 
 ## APIs and hosts
 
@@ -175,7 +178,7 @@ No other sites are contacted. The plugin does not send the file contents, only a
 | --- | --- | --- |
 | Enable scrobbling | on | Master switch for Simkl POSTs |
 | Show scrobble status on overlay | on | Now Watching / Updating / Paused on the card |
-| OSD message length | 4 seconds | Remaining top-left OSD (Skip Intro confirmations, 1–15s) |
+| OSD message length | 4 seconds | Skip confirmation on the now-playing card, and remaining top-left OSD (1–15s) |
 | Show debug OSD | off | Extra identification messages |
 | Show titles in | English | English or original/romaji in the sidebar and overlay |
 | Show now-playing overlay | on | Poster card when a title starts |

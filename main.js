@@ -70,6 +70,8 @@ var pluginAlive = true;
 var osdHoldTimer = null;
 var osdHoldUntil = 0;
 var osdHoldMessage = "";
+var overlayNotice = null;
+var overlayNoticeTimer = null;
 var lastAuthActionNonce = "";
 var authActionTimer = null;
 var lastSourceSignature = "";
@@ -85,6 +87,14 @@ var trustedDuration = 0;
 var authResyncAt = 0;
 var activeSimklSession = false;
 var flushStopInFlight = null;
+var lastStoppedKey = "";
+var mpvUnavailable = false;
+var lastPlaybackTimes = {
+  position: 0,
+  duration: 0,
+  percent: 0,
+  paused: false,
+};
 var unloadHookBound = false;
 var lastSimklSentAt = 0;
 var watchStartedAt = 0;
@@ -95,6 +105,7 @@ var overlayPlaybackPaintAt = 0;
 var lastOverlayLayoutSignature = "";
 var OSC_POSITION_BOTTOM = 2;
 var OSC_BOTTOM_CLEARANCE_PX = 48;
+var volumeDuck = createVolumeDuckState();
 
 function createScrobbleStatus() {
   return {
@@ -131,6 +142,15 @@ function createSkipIntroState() {
     dismissed: {},
     preview: false,
     label: "Skip Intro",
+  };
+}
+
+function createVolumeDuckState() {
+  return {
+    active: false,
+    original: null,
+    duckedTo: null,
+    segmentId: "",
   };
 }
 
@@ -183,6 +203,8 @@ function refreshPrefCache() {
     "overlay_position",
     "overlay_offset_px",
     "skip_intro_enabled",
+    "volume_duck_enabled",
+    "volume_duck_percent",
     "track_rewatches",
     "auth_action_kind",
     "auth_action_nonce",
@@ -360,12 +382,14 @@ function overlayShouldTrackHover() {
 }
 
 function overlayHideDelayMs(mode) {
+  if (mode === "notice") return osdDurationMs();
   if (mode === "resume") return overlayResumeDurationMs();
   return overlayDurationMs();
 }
 
 function resolveOverlayHideMode(mode) {
   if (mode === "hold") return "hold";
+  if (mode === "notice") return playbackIsPaused() ? "hold" : "notice";
   if (mode === "resume") return "resume";
   if (playbackIsPaused()) return "hold";
   return mode || "start";
@@ -402,6 +426,136 @@ function isSkipIntroEnabled() {
   return prefBool("skip_intro_enabled", true);
 }
 
+function isVolumeDuckEnabled() {
+  return prefBool("volume_duck_enabled", true);
+}
+
+function wantsSkipSegments() {
+  return isSkipIntroEnabled() || isVolumeDuckEnabled();
+}
+
+function volumeDuckPercent() {
+  var n = prefNumber("volume_duck_percent", 75);
+  if (!isFinite(n)) n = 75;
+  if (n < 1) n = 1;
+  if (n > 100) n = 100;
+  return Math.round(n);
+}
+
+function mpvGetVolume() {
+  if (!pluginAlive || mpvUnavailable || !mpv || typeof mpv.getNumber !== "function") return null;
+  try {
+    var vol = mpv.getNumber("volume");
+    if (typeof vol === "number" && isFinite(vol) && vol >= 0) return vol;
+  } catch (_error) {}
+  return null;
+}
+
+function mpvSetVolume(value) {
+  if (!pluginAlive || mpvUnavailable || !mpv || typeof mpv.set !== "function") return false;
+  var vol = Number(value);
+  if (!isFinite(vol) || vol < 0) return false;
+  try {
+    mpv.set("volume", vol);
+    return true;
+  } catch (error) {
+    log("mpv.set volume failed: " + errStr(error));
+    return false;
+  }
+}
+
+function duckableSegmentAt(position) {
+  var list = skipIntro.segments || [];
+  var pos = Number(position);
+  if (!isFinite(pos) || !list.length) return null;
+  for (var i = 0; i < list.length; i += 1) {
+    var segment = list[i];
+    if (!segment) continue;
+    if (segment.type !== "intro" && segment.type !== "outro") continue;
+    if (introdb.inIntroWindow(pos, segment)) return segment;
+  }
+  return null;
+}
+
+function clearVolumeDuckState() {
+  volumeDuck = createVolumeDuckState();
+}
+
+function restoreVolumeDuck(reason) {
+  if (!volumeDuck.active) {
+    clearVolumeDuckState();
+    return;
+  }
+  var original = volumeDuck.original;
+  var duckedTo = volumeDuck.duckedTo;
+  clearVolumeDuckState();
+  if (original == null) return;
+  if (reason !== "window-will-close" && reason !== "shutdown" && reason !== "teardown") {
+    var current = mpvGetVolume();
+    if (current != null && duckedTo != null && Math.abs(current - duckedTo) > 1.5) {
+      log("Volume duck skipped restore; volume changed during duck");
+      return;
+    }
+  }
+  if (mpvSetVolume(original)) {
+    log("Restored volume to " + original + " after " + (reason || "intro/outro"));
+  }
+}
+
+function applyVolumeDuck() {
+  if (!isVolumeDuckEnabled() || windowClosing || mpvUnavailable) {
+    restoreVolumeDuck(isVolumeDuckEnabled() ? "idle" : "disabled");
+    return;
+  }
+  if (skipIntro.status !== "ready" || !(skipIntro.segments && skipIntro.segments.length)) {
+    restoreVolumeDuck("no-segments");
+    return;
+  }
+  var segment = duckableSegmentAt(playbackPosition());
+  if (!segment) {
+    restoreVolumeDuck("segment-ended");
+    return;
+  }
+  var pct = volumeDuckPercent() / 100;
+  if (volumeDuck.active && volumeDuck.segmentId === segment.id) {
+    if (volumeDuck.original == null) return;
+    var retarget = Math.max(0, Math.round(volumeDuck.original * pct * 100) / 100);
+    if (retarget >= volumeDuck.original) return;
+    if (volumeDuck.duckedTo != null && Math.abs(retarget - volumeDuck.duckedTo) <= 0.5) return;
+    var live = mpvGetVolume();
+    if (live != null && volumeDuck.duckedTo != null && Math.abs(live - volumeDuck.duckedTo) > 1.5) return;
+    volumeDuck.duckedTo = retarget;
+    mpvSetVolume(retarget);
+    return;
+  }
+  if (volumeDuck.active) {
+    volumeDuck.segmentId = segment.id;
+    return;
+  }
+  var current = mpvGetVolume();
+  if (current == null) return;
+  var target = Math.max(0, Math.round(current * pct * 100) / 100);
+  if (target >= current) return;
+  volumeDuck.active = true;
+  volumeDuck.original = current;
+  volumeDuck.duckedTo = target;
+  volumeDuck.segmentId = segment.id;
+  if (mpvSetVolume(target)) {
+    log(
+      "Ducked volume from " +
+        current +
+        " to " +
+        target +
+        " (" +
+        volumeDuckPercent() +
+        "%) for " +
+        (segment.type || "intro")
+    );
+  } else {
+    clearVolumeDuckState();
+  }
+}
+
 function overlayAvailable() {
   return !!(
     overlay &&
@@ -411,14 +565,22 @@ function overlayAvailable() {
   );
 }
 
+function mpvCanQuery() {
+  return !!(pluginAlive && !windowClosing && !mpvUnavailable && mpv);
+}
+
+function markMpvUnavailable() {
+  mpvUnavailable = true;
+}
+
 function playbackPosition() {
+  var cached = Number(lastPlaybackTimes.position || 0);
+  if (cached > 0) return cached;
   try {
-    if (mpv && typeof mpv.getNumber === "function") {
-      var pos = mpv.getNumber("time-pos");
-      if (typeof pos === "number" && isFinite(pos)) return pos;
-    }
+    var pos = Number(core.status.position || 0);
+    if (isFinite(pos) && pos >= 0) return pos;
   } catch (_error) {}
-  return Number(core.status.position || 0);
+  return 0;
 }
 
 function warnOverlayUnavailable(error) {
@@ -436,16 +598,9 @@ function playerUiReady() {
 
 function playbackIsPaused() {
   try {
-    if (mpv && typeof mpv.getFlag === "function") {
-      var flag = mpv.getFlag("pause");
-      if (typeof flag === "boolean") return flag;
-    }
+    if (typeof core.status.paused === "boolean") return !!core.status.paused;
   } catch (_error) {}
-  try {
-    return !!core.status.paused;
-  } catch (_error) {
-    return false;
-  }
+  return !!lastPlaybackTimes.paused;
 }
 
 function clearOverlayHideTimer() {
@@ -469,7 +624,50 @@ function setOverlayOpacity(value) {
 }
 
 function overlayHasVisibleContent() {
-  return !!(overlayNowPlaying || overlayFading || overlaySkipVisible || overlaySkipFading);
+  return !!(
+    overlayNowPlaying ||
+    overlayFading ||
+    overlaySkipVisible ||
+    overlaySkipFading ||
+    overlayNotice
+  );
+}
+
+function clearOverlayNotice() {
+  if (overlayNoticeTimer) {
+    clearTimeout(overlayNoticeTimer);
+    overlayNoticeTimer = null;
+  }
+  overlayNotice = null;
+}
+
+function showOverlayNotice(label) {
+  var text = String(label || "").trim();
+  if (!text || !pluginAlive || windowClosing) return;
+  if (!prefBool("overlay_enabled", true)) {
+    statusOsd(text);
+    return;
+  }
+  overlayNotice = {
+    label: text,
+    state: "skipped",
+    until: Date.now() + osdDurationMs(),
+  };
+  if (overlayNoticeTimer) clearTimeout(overlayNoticeTimer);
+  overlayNoticeTimer = setTimeout(function () {
+    overlayNoticeTimer = null;
+    overlayNotice = null;
+    if (pluginAlive && !windowClosing) paintOverlay();
+  }, osdDurationMs());
+  if (overlayNowPlaying && !overlayFading) {
+    paintOverlay();
+    return;
+  }
+  if (current.media && current.media.matched) {
+    showNowPlayingOverlay(current.media, true, "notice");
+    return;
+  }
+  paintOverlay();
 }
 
 function bindOverlayMessages() {
@@ -678,6 +876,7 @@ function finishHideOverlay() {
   overlayFading = false;
   overlayShouldHide = false;
   overlayNowPlaying = null;
+  clearOverlayNotice();
   overlayHideMode = "";
   overlayWindowHovered = false;
   overlaySkipVisible = false;
@@ -862,6 +1061,7 @@ function clearChapterSkipRetries() {
 }
 
 function resetSkipIntro() {
+  restoreVolumeDuck("reset");
   stopSkipPoll();
   clearSkipHideTimer();
   clearSkipFadeTimer();
@@ -904,6 +1104,7 @@ function stopRuntimeTimers() {
     oscLayoutTimer = null;
   }
   clearOsdHold();
+  clearOverlayNotice();
   clearOverlayHideTimer();
   clearOverlayFadeTimer();
   stopSkipPoll();
@@ -913,8 +1114,10 @@ function stopRuntimeTimers() {
 }
 
 function teardownPlugin() {
+  restoreVolumeDuck("teardown");
   pluginAlive = false;
   windowClosing = true;
+  markMpvUnavailable();
   stopRuntimeTimers();
 }
 
@@ -976,7 +1179,7 @@ function seekToSeconds(seconds) {
   if (!isFinite(target) || target < 0) return false;
   var ok = false;
   try {
-    if (mpv && typeof mpv.set === "function") {
+    if (mpvCanQuery() && typeof mpv.set === "function") {
       mpv.set("time-pos", target);
       ok = true;
     }
@@ -1002,7 +1205,7 @@ function skipCurrentIntro() {
     clearSkipHideTimer();
     clearSkipFadeTimer();
     paintOverlay();
-    statusOsd("Skip Intro preview");
+    showOverlayNotice("Skipped Intro");
     log("Skip Intro preview clicked");
     return;
   }
@@ -1024,8 +1227,9 @@ function skipCurrentIntro() {
     importantOsd("Could not skip " + String(segment.label || "intro").toLowerCase());
     return;
   }
-  statusOsd("Skipped " + String(segment.label || "intro").toLowerCase());
+  showOverlayNotice("Skipped " + String(segment.label || "intro"));
   log("Skipped " + (segment.type || "intro") + " to " + Number(segment.endSec).toFixed(1) + "s");
+  if (segment.type === "intro" || segment.type === "outro") restoreVolumeDuck("skipped");
 }
 
 function pruneSkipDismissed(position) {
@@ -1042,7 +1246,15 @@ function pruneSkipDismissed(position) {
 
 function tickSkipIntro() {
   if (skipIntro.preview) return;
-  if (!isSkipIntroEnabled() || windowClosing || core.status.idle) {
+  if (windowClosing || mpvUnavailable || core.status.idle) {
+    skipIntro.active = null;
+    skipIntro.prompt = "hidden";
+    if (overlaySkipVisible || overlaySkipFading) hideSkipPrompt({ instant: true });
+    restoreVolumeDuck("idle");
+    return;
+  }
+  applyVolumeDuck();
+  if (!isSkipIntroEnabled()) {
     skipIntro.active = null;
     skipIntro.prompt = "hidden";
     if (overlaySkipVisible || overlaySkipFading) hideSkipPrompt({ instant: true });
@@ -1070,13 +1282,8 @@ function tickSkipIntro() {
 function playbackDurationSec() {
   var dur = finiteNumber(core.status.duration || 0, 0);
   if (dur > 0) return dur;
-  try {
-    if (mpv && typeof mpv.getNumber === "function") {
-      var mpvDur = mpv.getNumber("duration");
-      if (isFinite(mpvDur) && mpvDur > 0) return mpvDur;
-    }
-  } catch (_error) {}
-  return 0;
+  if (lastPlaybackTimes.duration > 0) return lastPlaybackTimes.duration;
+  return finiteNumber(trustedDuration, 0);
 }
 
 function playbackChapters() {
@@ -1088,7 +1295,7 @@ function playbackChapters() {
   } catch (error) {
     log("core.getChapters failed: " + errStr(error));
   }
-  if ((!list || !list.length) && mpv && typeof mpv.getNative === "function") {
+  if ((!list || !list.length) && mpvCanQuery() && typeof mpv.getNative === "function") {
     try {
       var native = mpv.getNative("chapter-list");
       if (Array.isArray(native)) list = native;
@@ -1135,7 +1342,7 @@ function activateSkipSegments(segments, source, summary) {
 }
 
 function applyChapterSkipFallback() {
-  if (!isSkipIntroEnabled()) return false;
+  if (!wantsSkipSegments()) return false;
   if (skipIntro.source === "introdb" && skipIntro.segments && skipIntro.segments.length) return false;
   var segments = introdb.segmentsFromChapters(playbackChapters(), playbackDurationSec());
   if (!segments.length) return false;
@@ -1162,7 +1369,7 @@ function scheduleChapterSkipRetry(mediaKey) {
   clearChapterSkipRetries();
   [400, 1200, 3000].forEach(function (delayMs) {
     var timer = setTimeout(function () {
-      if (!pluginAlive || windowClosing) return;
+      if (!pluginAlive || windowClosing || mpvUnavailable) return;
       if (!current.media || media.mediaKey(current.media) !== mediaKey) return;
       if (skipIntro.source === "introdb" && skipIntro.segments && skipIntro.segments.length) return;
       applyChapterSkipFallback();
@@ -1172,8 +1379,8 @@ function scheduleChapterSkipRetry(mediaKey) {
 }
 
 function handleChapterListChanged() {
-  if (!pluginAlive || windowClosing) return;
-  if (!isSkipIntroEnabled()) return;
+  if (!pluginAlive || windowClosing || mpvUnavailable) return;
+  if (!wantsSkipSegments()) return;
   if (!current.media || !current.media.matched) return;
   if (skipIntro.status === "loading") return;
   if (skipIntro.source === "introdb" && skipIntro.segments && skipIntro.segments.length) return;
@@ -1182,7 +1389,7 @@ function handleChapterListChanged() {
 
 async function loadSkipIntro(match) {
   resetSkipIntro();
-  if (!isSkipIntroEnabled()) return;
+  if (!wantsSkipSegments()) return;
   if (!match || !match.matched) return;
   var mediaKey = media.mediaKey(match);
   skipIntro.mediaKey = mediaKey;
@@ -1281,31 +1488,98 @@ introdb.configure({
   logger: log,
 });
 
-function readPlaybackTimes() {
-  var position = Number(core.status.position || 0);
-  var duration = Number(core.status.duration || 0);
+function rememberPlaybackTimes(times) {
+  if (!times) return;
+  lastPlaybackTimes = {
+    position: Number(times.position || 0),
+    duration: Number(times.duration || 0),
+    percent: Number(times.percent || 0),
+    paused: !!times.paused,
+  };
+}
+
+function readCorePlaybackTimes() {
+  var position = 0;
+  var duration = 0;
+  var paused = !!lastPlaybackTimes.paused;
   try {
-    if (mpv && typeof mpv.getNumber === "function") {
-      var mpvPos = mpv.getNumber("time-pos");
-      var mpvDur = mpv.getNumber("duration");
-      var mpvPct = mpv.getNumber("percent-pos");
-      if (isFinite(mpvPos) && mpvPos >= 0) position = mpvPos;
-      if (isFinite(mpvDur) && mpvDur > 0) duration = mpvDur;
-      trustedDuration = media.trustedDuration(position, duration, trustedDuration);
-      if (isFinite(mpvPct) && mpvPct >= 0 && mpvPct <= 100) {
-        if (mpvPct <= 1 && duration > 0 && position / duration > 0.02) mpvPct *= 100;
-        if (duration > position + 1 || mpvPct < 95) {
-          return { position: position, duration: duration, percent: Math.round(mpvPct * 100) / 100 };
-        }
-      }
-    }
+    position = Number(core.status.position || 0);
   } catch (_error) {}
+  try {
+    duration = Number(core.status.duration || 0);
+  } catch (_error) {}
+  try {
+    if (typeof core.status.paused === "boolean") paused = !!core.status.paused;
+  } catch (_error) {}
+  if (!isFinite(position) || position < 0) position = 0;
+  if (!isFinite(duration) || duration < 0) duration = 0;
+  return { position: position, duration: duration, paused: paused };
+}
+
+function stopProgressSnapshot() {
+  if (lastPlaybackTimes.percent > 0) return lastPlaybackTimes;
+  var coreTimes = readCorePlaybackTimes();
+  var duration = coreTimes.duration || trustedDuration || 0;
+  trustedDuration = media.trustedDuration(coreTimes.position, duration, trustedDuration);
+  return {
+    position: coreTimes.position,
+    duration: duration,
+    percent: media.playbackProgress(coreTimes.position, duration, trustedDuration),
+    paused: coreTimes.paused,
+  };
+}
+
+function cachedPlaybackTimes() {
+  if ((windowClosing || mpvUnavailable) && lastPlaybackTimes.percent > 0) {
+    return lastPlaybackTimes;
+  }
+  var coreTimes = readCorePlaybackTimes();
+  var position = coreTimes.position;
+  var duration = coreTimes.duration || lastPlaybackTimes.duration || trustedDuration || 0;
+  var paused = coreTimes.paused;
   trustedDuration = media.trustedDuration(position, duration, trustedDuration);
   return {
     position: position,
     duration: duration,
     percent: media.playbackProgress(position, duration, trustedDuration),
+    paused: paused,
   };
+}
+
+function refreshMpvPlaybackTimes() {
+  if (!mpvCanQuery() || typeof mpv.getNumber !== "function") return cachedPlaybackTimes();
+  var position = 0;
+  var duration = 0;
+  var percent = null;
+  var paused = playbackIsPaused();
+  try {
+    var mpvPos = mpv.getNumber("time-pos");
+    var mpvDur = mpv.getNumber("duration");
+    var mpvPct = mpv.getNumber("percent-pos");
+    if (isFinite(mpvPos) && mpvPos >= 0) position = mpvPos;
+    if (isFinite(mpvDur) && mpvDur > 0) duration = mpvDur;
+    if (typeof mpv.getFlag === "function") {
+      var flag = mpv.getFlag("pause");
+      if (typeof flag === "boolean") paused = flag;
+    }
+    trustedDuration = media.trustedDuration(position, duration, trustedDuration);
+    if (isFinite(mpvPct) && mpvPct >= 0 && mpvPct <= 100) {
+      if (mpvPct <= 1 && duration > 0 && position / duration > 0.02) mpvPct *= 100;
+      if (duration > position + 1 || mpvPct < 95) percent = Math.round(mpvPct * 100) / 100;
+    }
+  } catch (_error) {
+    return cachedPlaybackTimes();
+  }
+  if (percent == null) {
+    percent = media.playbackProgress(position, duration, trustedDuration);
+  }
+  var times = { position: position, duration: duration, percent: percent, paused: paused };
+  rememberPlaybackTimes(times);
+  return times;
+}
+
+function readPlaybackTimes() {
+  return cachedPlaybackTimes();
 }
 
 function currentProgress() {
@@ -1339,6 +1613,8 @@ async function waitForReliableProgress() {
   var lastPercent = null;
   var stableAt = 0;
   while (Date.now() - started < 4000) {
+    if (!pluginAlive || windowClosing || mpvUnavailable) return null;
+    if (mpvCanQuery()) refreshMpvPlaybackTimes();
     times = readPlaybackTimes();
     if (times.duration > times.position + 2 && times.duration > 30) {
       var percent = currentProgress();
@@ -1369,9 +1645,16 @@ async function waitForReliableProgress() {
 }
 
 async function syncPlaybackToSimkl(reason) {
-  if (!pluginAlive || windowClosing) return;
+  if (!pluginAlive || windowClosing || mpvUnavailable) return;
+  if (flushStopInFlight) {
+    try {
+      await flushStopInFlight;
+    } catch (_error) {}
+  }
   var match = current.media;
   if (!match || !match.matched) return;
+  if (current.path !== currentPath()) return;
+  if (lastStoppedKey && media.mediaKey(match) === lastStoppedKey) return;
   if (core.status.idle) return;
   var percent = await waitForReliableProgress();
   if (percent == null) return;
@@ -1400,6 +1683,9 @@ function sourceSignature() {
 }
 
 function overlayScrobbleChip() {
+  if (overlayNotice && overlayNotice.label && Date.now() < Number(overlayNotice.until || 0)) {
+    return { label: overlayNotice.label, state: overlayNotice.state || "skipped" };
+  }
   if (!prefBool("status_osd", true)) return null;
   var chip = overlayCard.scrobbleChip(buildScrobbleSnapshot());
   if (!chip || !chip.label) return chip;
@@ -1513,7 +1799,21 @@ function buildSkipIntroSidebar() {
   var segments = skipIntro.segments || [];
   var detail = "";
   var items = [];
-  if (!isSkipIntroEnabled()) detail = "Skip Intro is turned off.";
+  if (!isSkipIntroEnabled() && !isVolumeDuckEnabled()) detail = "Skip Intro is turned off.";
+  else if (!isSkipIntroEnabled() && isVolumeDuckEnabled()) {
+    if (skipIntro.status === "ready" && segments.length) {
+      items = segments.map(function (segment) {
+        return {
+          type: segment.type,
+          label: segment.chapterTitle || segment.label,
+          range: media.formatDuration(segment.startSec) + " – " + media.formatDuration(segment.endSec),
+        };
+      });
+      detail = "Skip buttons off. Volume ducks during intro and outro.";
+    } else {
+      detail = "Skip buttons off. Volume ducking is on.";
+    }
+  }
   else if (skipIntro.status === "loading") detail = "Looking up IntroDB timestamps…";
   else if (skipIntro.status === "ready" && segments.length) {
     items = segments.map(function (segment) {
@@ -1863,7 +2163,9 @@ function startPlaybackPoll() {
   if (pollTimer) return;
   function tick() {
     pollTimer = null;
-    if (!pluginAlive || windowClosing) return;
+    if (!pluginAlive || windowClosing || mpvUnavailable) return;
+    refreshMpvPlaybackTimes();
+    applyVolumeDuck();
     syncCurrentPlayback("poll").catch(function (error) {
       log("playback poll failed: " + errStr(error));
     });
@@ -1897,22 +2199,42 @@ function withTimeout(promise, ms, label) {
   });
 }
 
-async function flushStop(reason) {
+function watchingSessionOpen() {
+  if (activeSimklSession) return true;
+  var phase = playbackSession && playbackSession.phase;
+  if (phase === "watching" || phase === "paused") return true;
+  var last = playbackSession && playbackSession.lastSentAction;
+  return last === "start" || last === "pause";
+}
+
+function closeWatchingSessionLocally() {
+  activeSimklSession = false;
+  if (!playbackSession) playbackSession = sessionLib.createSession();
+  playbackSession.phase = "idle";
+  playbackSession.lastSentAction = "stop";
+  playbackSession.pendingAction = "";
+  playbackSession.pendingAt = 0;
+  playbackSession.pendingProgress = 0;
+}
+
+async function flushStop(reason, options) {
   if (flushStopInFlight) return flushStopInFlight;
+  var settings = options || {};
   var match = current.media;
-  var progress = currentProgress();
-  if (!match || !match.matched) return;
-  if (!activeSimklSession && playbackSession.phase === "idle") {
+  var progress = settings.completed ? 100 : settings.progress != null ? Number(settings.progress) : currentProgress();
+  if (!isFinite(progress)) progress = 0;
+  if (!match || !match.matched || !watchingSessionOpen()) {
+    closeWatchingSessionLocally();
     log("No active Simkl watching session to stop (" + reason + ")");
     return;
   }
+  var captured = match;
+  lastStoppedKey = media.mediaKey(captured);
+  closeWatchingSessionLocally();
   log("Stopping Simkl watching session (" + reason + ") at " + progress + "%");
   flushStopInFlight = (async function () {
     try {
-      try {
-        await scrobbleChain;
-      } catch (_error) {}
-      await withTimeout(sendScrobble("stop", progress), 8000, "Simkl stop");
+      await enqueueScrobble("stop", progress, false, captured);
     } catch (error) {
       log("Failed to stop Simkl session on " + reason + ": " + errStr(error));
     } finally {
@@ -1928,7 +2250,9 @@ function bindUnloadHook() {
   try {
     mpv.addHook("on_unload", 50, async function (next) {
       try {
-        await flushStop("on_unload");
+        restoreVolumeDuck("on_unload");
+        var times = stopProgressSnapshot();
+        await flushStop("on_unload", { progress: times.percent });
       } catch (error) {
         log("on_unload stop failed: " + errStr(error));
       }
@@ -1941,14 +2265,16 @@ function bindUnloadHook() {
   }
 }
 
-function enqueueScrobble(action, progress, deferred) {
+function enqueueScrobble(action, progress, deferred, match) {
+  var captured = match || current.media;
+  var sentAt = Number(playbackSession && playbackSession.lastSentAt || lastSimklSentAt || 0);
   scrobbleChain = scrobbleChain
     .then(async function () {
       if (deferred) {
-        var wait = Math.max(0, 20000 - (Date.now() - Number(playbackSession.lastSentAt || 0)));
+        var wait = Math.max(0, 20000 - (Date.now() - sentAt));
         if (wait) await new Promise(function (resolve) { setTimeout(resolve, wait); });
       }
-      await sendScrobble(action, progress);
+      await sendScrobble(action, progress, false, captured);
     })
     .catch(function (error) {
       log("Scrobble queue failed: " + errStr(error));
@@ -1956,9 +2282,9 @@ function enqueueScrobble(action, progress, deferred) {
   return scrobbleChain;
 }
 
-async function sendScrobble(action, progress, isRetry) {
+async function sendScrobble(action, progress, isRetry, matchOverride) {
   if (!pluginAlive && action !== "stop") return;
-  var match = current.media;
+  var match = matchOverride || current.media;
   if (!isScrobblingEnabled() && action !== "stop") {
     setScrobbleStatus({
       status: "disabled",
@@ -2055,14 +2381,15 @@ async function sendScrobble(action, progress, isRetry) {
 
   if (result.notFound) {
     playbackSession = sessionLib.rollback(playbackSession, action);
-    if (!isRetry && current.path) {
+    var sameItem = !matchOverride || (current.media && media.mediaKey(matchOverride) === media.mediaKey(current.media));
+    if (!isRetry && current.path && sameItem) {
       log("Simkl returned 404 for " + labelFor(match) + "; re-identifying from filename");
       simkl.forgetMatch(current.path, current.filename);
       var retried = await simkl.identifyFile(current.path, { force: true });
       current.media = retried;
       queueSidebarRefresh(false);
       if (retried && retried.matched) {
-        return sendScrobble(action, progress, true);
+        return sendScrobble(action, progress, true, retried);
       }
     }
     setScrobbleStatus({
@@ -2195,37 +2522,35 @@ async function identifyCurrentFile() {
 
 async function handleNewFile() {
   var signature = sourceSignature();
-  var previous = current.media;
   var previousProgress = currentProgress();
   var fileChanged = !!(lastSourceSignature && lastSourceSignature !== signature);
   if (fileChanged) {
-    await dispatch({
-      type: "file-change",
-      previousItemKey: previous && previous.matched ? media.mediaKey(previous) : "",
-      previousProgress: previousProgress,
-      itemKey: "",
-    });
+    await flushStop("file-change", { progress: previousProgress });
   }
   lastSourceSignature = signature;
   if (fileChanged || !playbackSession || !playbackSession.itemKey) {
     trustedDuration = 0;
+    lastPlaybackTimes = { position: 0, duration: 0, percent: 0, paused: false };
     watchStartedAt = 0;
     playbackSession = sessionLib.createSession();
     correction = createCorrectionState();
     lastOverlayKey = "";
     resetSkipIntro();
   }
+  if (current.identifying && current.path === currentPath()) return;
   await identifyCurrentFile();
+  lastStoppedKey = "";
 }
 
 async function handlePlaybackStarted() {
-  if (current.identifying) return;
-  if (!current.media || current.path !== currentPath()) {
+  if (!current.media || current.path !== currentPath() || current.identifying) {
     await handleNewFile();
   }
-  if (playbackIsPaused()) return;
+  if (playbackIsPaused() || current.identifying) return;
+  if (current.path !== currentPath()) return;
   var match = current.media;
   if (!match || !match.matched) return;
+  if (lastStoppedKey && media.mediaKey(match) === lastStoppedKey) return;
   await syncPlaybackToSimkl("playback-started");
 }
 
@@ -2265,17 +2590,6 @@ async function handlePauseChanged() {
   );
 }
 
-async function handleEnded(completed) {
-  var match = current.media;
-  if (!match || !match.matched) return;
-  await dispatch({
-    type: "stop",
-    itemKey: media.mediaKey(match),
-    progress: completed ? 100 : currentProgress(),
-    completed: !!completed,
-  });
-}
-
 function tickPauseDebounce() {
   var decision = sessionLib.decide(
     playbackSession,
@@ -2311,6 +2625,7 @@ function readAuthActionFromPreferences() {
   refreshPrefCache();
   checkAuthActionRequest();
   maybeRepaintOverlayLayout();
+  applyVolumeDuck();
 }
 
 function startAuthActionPoll() {
@@ -2628,7 +2943,7 @@ function registerMenu() {
         importantOsd("Nothing to mark as watched");
         return;
       }
-      enqueueScrobble("stop", 100, false);
+      flushStop("mark-watched", { completed: true, progress: 100 });
     })
   );
   menu.addItem(
@@ -2670,6 +2985,16 @@ function registerMenu() {
 function wrap(label, fn) {
   return async function () {
     if (!pluginAlive) return;
+    if (windowClosing || mpvUnavailable) {
+      if (
+        label !== "end-file" &&
+        label !== "shutdown" &&
+        label !== "window-will-close" &&
+        label !== "window-did-close"
+      ) {
+        return;
+      }
+    }
     try {
       return await fn.apply(null, arguments);
     } catch (error) {
@@ -2683,6 +3008,7 @@ event.on(
   wrap("window-loaded", function () {
     if (!pluginAlive) return;
     windowClosing = false;
+    mpvUnavailable = false;
     startAuthActionPoll();
     initializeSidebar();
     startPlaybackPoll();
@@ -2776,15 +3102,20 @@ try {
 event.on(
   "mpv.end-file",
   wrap("end-file", function () {
-    var completed = isPlaybackNearEnd();
-    if (completed) return handleEnded(true);
-    return flushStop("end-file");
+    var times = stopProgressSnapshot();
+    var completed = media.isNearEnd(times.position, times.duration, trustedDuration);
+    return flushStop("end-file", {
+      completed: completed,
+      progress: completed ? 100 : times.percent,
+    });
   })
 );
 event.on(
   "iina.window-will-close",
   wrap("window-will-close", function () {
+    restoreVolumeDuck("window-will-close");
     windowClosing = true;
+    markMpvUnavailable();
     stopRuntimeTimers();
     resetSkipIntro();
     hideNowPlayingOverlayNow({ instant: true });
@@ -2799,20 +3130,26 @@ event.on(
     try {
       if (overlay && typeof overlay.hide === "function") overlay.hide();
     } catch (_error) {}
-    return flushStop("window-will-close");
+    return flushStop("window-will-close", { progress: stopProgressSnapshot().percent });
   })
 );
 event.on(
   "iina.window-did-close",
   wrap("window-did-close", function () {
-    return flushStop("window-did-close");
+    windowClosing = true;
+    markMpvUnavailable();
+    return flushStop("window-did-close", { progress: stopProgressSnapshot().percent });
   })
 );
 try {
   event.on(
     "mpv.shutdown",
     wrap("shutdown", function () {
-      return flushStop("mpv.shutdown");
+      restoreVolumeDuck("shutdown");
+      windowClosing = true;
+      markMpvUnavailable();
+      stopRuntimeTimers();
+      return flushStop("mpv.shutdown", { progress: stopProgressSnapshot().percent });
     })
   );
 } catch (error) {

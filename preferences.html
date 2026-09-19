@@ -30,7 +30,7 @@
       <input type="number" data-type="int" data-pref-key="osd_seconds" min="1" max="15" step="1" style="width: 120px">
     </div>
     <p class="small secondary pref-help">
-      How long remaining top-left OSD messages stay on screen, such as Skip Intro confirmations. Range 1–15 seconds.
+      How long skip confirmations stay on the now-playing card, and how long remaining top-left OSD messages stay on screen. Range 1–15 seconds.
     </p>
   </div>
 
@@ -121,6 +121,22 @@
     </label>
     <p class="small secondary pref-help">
       When IntroDB has timestamps for the Simkl-matched episode, show a skip button during recap, intro, outro, and preview windows. If IntroDB has nothing for the file, OP / ED / recap / preview chapters in the file are used instead. The button stays for the whole window, fades after 5 seconds, and remains clickable until that segment ends. Needs the Video Overlay permission.
+    </p>
+  </div>
+
+  <div class="pref-section">
+    <label>
+      <input type="checkbox" data-type="bool" data-pref-key="volume_duck_enabled">
+      Duck volume during intro and outro
+    </label>
+    <p class="small secondary pref-help" style="margin-top: 8px; margin-bottom: 4px">
+      Duck volume to (%)
+    </p>
+    <div>
+      <input type="number" data-type="int" data-pref-key="volume_duck_percent" min="1" max="100" step="1" style="width: 120px">
+    </div>
+    <p class="small secondary pref-help">
+      While an intro or outro is playing, set volume to this percent of the level you had, then restore it when that segment ends. 75 keeps 75% of your volume. Recap and preview are not ducked. Uses the same IntroDB or file-chapter times as Skip Intro.
     </p>
   </div>
 

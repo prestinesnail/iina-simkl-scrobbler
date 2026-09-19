@@ -2,7 +2,7 @@ var media = require("./media.js");
 
 var API_ROOT = "https://api.simkl.com";
 var APP_NAME = "iina-simkl-scrobbler";
-var PLUGIN_VERSION = "1.1.31";
+var PLUGIN_VERSION = "1.1.32";
 var USER_AGENT = "iina-simkl-scrobbler/" + PLUGIN_VERSION;
 var TOKEN_PATH = "@data/simkl-token.json";
 var CACHE_PATH = "@data/simkl-match-cache.json";
@@ -841,10 +841,23 @@ function migrateCacheKeys(cache) {
   return next;
 }
 
+function backfillShowCache(cache) {
+  var keys = Object.keys(cache || {});
+  for (var i = 0; i < keys.length; i += 1) {
+    var record = cache[keys[i]];
+    if (!record || !record.matched || !record.ids) continue;
+    var showKeys = showCacheKeysFromIds(record.ids);
+    for (var s = 0; s < showKeys.length; s += 1) {
+      if (!cache[showKeys[s]]) cache[showKeys[s]] = record;
+    }
+  }
+}
+
 function loadMatchCache() {
   if (runtime.matchCache) return runtime.matchCache;
   var cache = readJson(CACHE_PATH, null);
   runtime.matchCache = migrateCacheKeys(cache && typeof cache === "object" ? cache : {});
+  backfillShowCache(runtime.matchCache);
   pruneCacheMap(runtime.matchCache, CACHE_MAX_ENTRIES);
   return runtime.matchCache;
 }
@@ -884,12 +897,51 @@ function negativeEntryFresh(entry) {
   return isFinite(age) && age >= 0 && age < NEGATIVE_TTL_MS;
 }
 
+function showCacheKeysFromIds(ids) {
+  var keys = [];
+  if (!ids) return keys;
+  if (ids.imdb) keys.push(hashCacheKey("v3:show:imdb:" + String(ids.imdb).toLowerCase()));
+  if (ids.tvdb) keys.push(hashCacheKey("v3:show:tvdb:" + String(ids.tvdb)));
+  if (ids.tmdb) keys.push(hashCacheKey("v3:show:tmdb:" + String(ids.tmdb)));
+  var simklId = media.readSimklId(ids);
+  if (simklId) keys.push(hashCacheKey("v3:show:simkl:" + simklId));
+  return keys;
+}
+
+function rememberShow(match) {
+  if (!match || !match.matched) return;
+  var keys = showCacheKeysFromIds(match.ids);
+  if (!keys.length) return;
+  var cache = loadMatchCache();
+  var record = media.cacheRecord(match);
+  record.episodeTitle = "";
+  record.episodeIds = {};
+  keys.forEach(function (key) {
+    cache[key] = record;
+  });
+  saveMatchCache();
+}
+
+function cachedShowMatch(path, filename) {
+  var ids = media.extractExternalIds(String(path || "") + " " + String(filename || ""));
+  var keys = showCacheKeysFromIds(ids);
+  if (!keys.length) return null;
+  var cache = loadMatchCache();
+  for (var i = 0; i < keys.length; i += 1) {
+    var record = cache[keys[i]];
+    if (!record || !record.matched) continue;
+    return media.applyEpisodeFromFilename(media.mediaFromCache(record, filename), filename);
+  }
+  return null;
+}
+
 function rememberMatch(filename, path, match) {
   var key = cacheKeyFor(filename, path);
   if (!key) return;
   var cache = loadMatchCache();
   cache[key] = media.cacheRecord(match);
   saveMatchCache();
+  rememberShow(match);
   var negative = loadNegativeCache();
   if (negative[key]) {
     delete negative[key];
@@ -946,6 +998,14 @@ function isTrustedMatch(match) {
     match.trusted !== false &&
     !media.isWeakTitle(match.catalogTitle || "") &&
     media.readSimklId(match.ids)
+  );
+}
+
+function hasCatalogFields(match) {
+  return !!(
+    isTrustedMatch(match) &&
+    (match.titleEn || match.catalogTitle) &&
+    (match.poster || match.yearLabel || match.year)
   );
 }
 
@@ -1106,7 +1166,7 @@ async function identifyFile(filePath, options) {
   if (!settings.force) {
     var cached = cachedMatch(filename, path);
     if (cached && cached.matched && isTrustedMatch(cached)) {
-      if (!cached.titleEn || !cached.yearLabel) {
+      if (!hasCatalogFields(cached)) {
         cached = await enrichMatch(cached);
         rememberMatch(filename, path, cached);
       }
@@ -1116,6 +1176,15 @@ async function identifyFile(filePath, options) {
     if (cached && !cached.matched) {
       log("Negative cache hit for " + filename);
       return cached;
+    }
+    var showCached = cachedShowMatch(path, filename);
+    if (showCached && isTrustedMatch(showCached)) {
+      if (!hasCatalogFields(showCached)) {
+        showCached = await enrichMatch(showCached);
+      }
+      rememberMatch(filename, path, showCached);
+      log("Show cache hit for " + filename + " -> " + media.mediaLabel(showCached, "english"));
+      return showCached;
     }
   }
 
@@ -1182,6 +1251,7 @@ async function identifyFile(filePath, options) {
 
 async function enrichMatch(match) {
   if (!match || !match.matched) return match;
+  if (hasCatalogFields(match) && match.source !== "redirect") return match;
   var id = media.readSimklId(match.ids);
   if (!id) return media.applyTitleFallback(match, match.filename);
 
