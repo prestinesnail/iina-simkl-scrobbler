@@ -6,7 +6,7 @@ Requires **IINA 1.4.0** or later.
 
 ![Now-playing overlay showing Simkl watch progress](docs/now-playing-overlay.jpg)
 
-The overlay shows the matched title, live progress, and time left. Episode chips match Simkl: **S01E01** for TV, **Ep. 9** for anime, nothing for movies. Click the card to open the title on Simkl. Hover anywhere in the player after it fades to bring it back. Plugin settings choose the card corner (Top-Left, Bottom-Left, Top-Right, Bottom-Right, or Top-Center) and a pixel inset; Skip Intro / Recap / Outro / Preview sits in the opposite corner so the two do not overlap.
+The overlay shows the matched title, live progress, and time left. Episode chips match Simkl: **S01E01** for TV, **Ep. 9** for anime, nothing for movies. Click the card to open the title on Simkl. Hover anywhere in the player after it fades to bring it back. Plugin settings choose the card corner (Top-Left, Bottom-Left, Top-Right, Bottom-Right, or Top-Center) and a pixel inset. Skip Intro / Recap / Outro / Preview stays in the bottom-right, and only moves to the bottom-left when the card is also bottom-right.
 
 ## Install
 
@@ -29,17 +29,14 @@ Restart IINA. The plugin appears under **Settings → Plugins**. Quit IINA fully
 
 ## Setup
 
-1. In IINA, open **Settings → Plugins → SIMKL Scrobbler → Settings**. The plugin’s AUTH V2 client ID is already filled in. Leave it unless you want your own app.
-2. Click **Connect to Simkl**, or open the **SIMKL** sidebar (`⌘K`) and click **Connect**.
-3. Approve access in the browser window that opens (`https://simkl.com/oauth2/authorize`). After you allow it, a local page at `http://127.0.0.1/callback` confirms you can return to IINA.
+1. Click **Connect to Simkl** in plugin settings, or open the **SIMKL** sidebar (`⌘K`) and click **Connect**.
+2. Approve access in the browser window that opens (`https://simkl.com/oauth2/authorize`). After you allow it, a local page at `http://127.0.0.1/callback` confirms you can return to IINA.
 
-If you connected with an older plugin build, connect once more. Watch history stays on Simkl.
-
-To use your own Simkl app instead of the bundled one: register **Mobile, desktop & browser apps** (AUTH V2) at [simkl.com/settings/developer/new](https://simkl.com/settings/developer/new/). Set the redirect URL to exactly `http://127.0.0.1/callback` (no port). Paste that **client ID** into plugin settings. No client secret. An AUTH V1 app ID will not work.
+If you connected with an older plugin build, connect once more. Watch history stays on Simkl. Search, scrobble, and catalog lookups all use your signed-in token.
 
 The access token and refresh token are stored in the macOS keychain. A plaintext copy is written to plugin preferences and the plugin data folder only if the keychain write fails; successful keychain storage deletes those copies. Access tokens last 7 days and are refreshed automatically; the refresh token lasts 180 days while you keep using the plugin. Sign-out revokes the grant. You can also remove the app in [Simkl Connected Apps](https://simkl.com/settings/connected-apps/).
 
-![Plugin settings for client ID, overlay, skip intro, and Simkl connect](docs/plugin-settings.jpg)
+![Plugin settings for overlay, skip intro, and Simkl connect](docs/plugin-settings.jpg)
 
 IINA will ask you to approve two “dangerous” permissions. They are required for scrobbling to work.
 
@@ -142,15 +139,15 @@ The plugin only talks to hosts listed in `Info.json` `allowedDomains`.
 | `POST /oauth2/token` | Exchange the code (and later refresh the 7-day access token) |
 | `POST /oauth2/revoke` | Sign-out |
 | `GET /users/settings` | Load the connected account |
-| `POST /search/file` | Identify the playing file (requires a user token) |
+| `POST /search/file` | Identify the playing file |
 | `GET /redirect` | Resolve `{imdb-tt…}` / `{tmdb-…}` / `{tvdb-…}` tags; read `Location`, do not follow |
-| `GET /search/movie`, `/search/tv`, `/search/anime` | Title-search fallback and Correct match (requires a user token) |
-| `GET /movies/{id}`, `/tv/{id}`, `/anime/{id}` | Titles, poster, year, extra IDs (no `Authorization`; Cloudflare-cached) |
+| `GET /search/movie`, `/search/tv`, `/search/anime` | Title-search fallback and Correct match |
+| `GET /movies/{id}`, `/tv/{id}`, `/anime/{id}` | Titles, poster, year, extra IDs |
 | `POST /scrobble/start` | Play or resume |
 | `POST /scrobble/pause` | Pause (resume point) |
 | `POST /scrobble/stop` | Stop, close, quit, or finished |
 
-Every request includes your public `client_id`, `app-name`, and `app-version`. Search, scrobble, and account calls send `Authorization: Bearer` from the keychain. Catalog detail lookups omit that header so Cloudflare can serve them. JSON POST bodies go through curl so they are sent as JSON (IINA’s HTTP helper form-encodes objects).
+Every Simkl API call includes the plugin’s `client_id`, `app-name`, and `app-version`, and sends `Authorization: Bearer` from the keychain. Connect before identifying or scrobbling. JSON POST bodies go through curl so they are sent as JSON (IINA’s HTTP helper form-encodes objects).
 
 Requests are sent one at a time. POSTs wait at least 1 second apart. A `429` with `rate_limit` is retried after about a second; a daily `user_limit_exceeded` is not retried. `400 RATE_LIMIT` is Simkl’s 20-second write lock, not a quota error.
 
@@ -176,7 +173,6 @@ No other sites are contacted. The plugin does not send the file contents, only a
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
-| Simkl client ID | bundled AUTH V2 id | Public app id. Blank/default uses the plugin’s app; override with your own V2 desktop client ID |
 | Enable scrobbling | on | Master switch for Simkl POSTs |
 | Show scrobble status on overlay | on | Now Watching / Updating / Paused on the card |
 | OSD message length | 4 seconds | Remaining top-left OSD (Skip Intro confirmations, 1–15s) |
@@ -186,7 +182,7 @@ No other sites are contacted. The plugin does not send the file contents, only a
 | Overlay display length | 8 seconds | How long the card stays fully visible at start (1–30) |
 | Overlay length after resume | 2 seconds | Hide delay after unpause unless the pointer is over the player (1–30) |
 | Overlay position | Bottom-Left | Poster card corner: Top-Left, Bottom-Left, Top-Right, Bottom-Right, or Top-Center |
-| Overlay offset | 24 px | Inset from that edge (0–240). Skip Intro uses the opposite corner |
+| Overlay offset | 24 px | Inset from that edge (0–240). Skip Intro stays bottom-right unless the card is there |
 | Show Skip Intro / Recap / Outro | on | IntroDB skip buttons, or OP/ED chapters in the file when IntroDB has none |
 | Track rewatches | off | On `stop` ≥ 80% of an already-finished title, log a separate viewing. Simkl Pro / VIP only. Never sent on play or pause |
 | Pause debounce | 400 ms | Ignore brief pauses from seeking (0–5000) |

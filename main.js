@@ -186,7 +186,6 @@ function refreshPrefCache() {
     "track_rewatches",
     "auth_action_kind",
     "auth_action_nonce",
-    "simkl_client_id",
     "simkl_oauth_token",
   ];
   var next = {};
@@ -2006,7 +2005,7 @@ async function sendScrobble(action, progress, isRetry) {
     if (result.reason === "legacy-auth") skipDetail = "Reconnect Simkl to continue scrobbling.";
     if (result.reason === "quota-exceeded") skipDetail = "Simkl daily request limit reached. Try again after midnight US Eastern.";
     if (result.reason === "insufficient-scope") skipDetail = "Reconnect Simkl and allow library updates.";
-    if (result.reason === "missing-client-credentials") skipDetail = "Add your Simkl client ID in preferences.";
+
     if (result.reason === "missing-simkl-match") skipDetail = "This file was not identified.";
     if (result.reason === "missing-episode") skipDetail = "Pick the correct episode before scrobbling.";
     setScrobbleStatus({

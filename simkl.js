@@ -15,11 +15,7 @@ var AUTH_REQUIRED = "Simkl authorization required";
 var OAUTH_SCOPE = "media:read media:write";
 var OAUTH_ISSUER = "https://simkl.com";
 var AUTHORIZE_ROOT = "https://simkl.com";
-var DEFAULT_CLIENT_ID = "594766b276bb4c56547b98e4f2bd73846852405ff3abb2f4cc0a95d5631c5acb";
-var LEGACY_CLIENT_IDS = {
-  ee8ce04a2184017be803d8a223f923c3088ffca872a1e9f2c7ce63ae5efd45a9: true,
-  ca11a8bbe8b30f5983fe424a4cd15a1d7c96087e37f8ce5c96db11ba3dbf648a: true,
-};
+var CLIENT_ID = "594766b276bb4c56547b98e4f2bd73846852405ff3abb2f4cc0a95d5631c5acb";
 var OAUTH_SCRIPT_PATH = "@tmp/simkl-oauth-listen.py";
 var OAUTH_LISTEN_PATH = "@tmp/simkl-oauth-listen.json";
 var OAUTH_CALLBACK_PATH = "@tmp/simkl-oauth-callback.json";
@@ -79,7 +75,6 @@ function configure(options) {
     runtime.rateLimitRemaining = null;
     runtime.rateLimitLimit = null;
   }
-  if (settings.preferences) migrateLegacyClientId();
   if (settings.resetToken) {
     runtime.tokenCache = undefined;
     runtime.viewerProfile = null;
@@ -123,34 +118,8 @@ function pref(key, fallbackValue) {
   return value === undefined || value === null ? fallbackValue : value;
 }
 
-function isLegacyClientId(value) {
-  return !!LEGACY_CLIENT_IDS[String(value || "").trim().toLowerCase()];
-}
-
-function persistClientId(value) {
-  if (!runtime.preferences || typeof runtime.preferences.set !== "function") return;
-  try {
-    runtime.preferences.set("simkl_client_id", value);
-    if (typeof runtime.preferences.sync === "function") runtime.preferences.sync();
-  } catch (_error) {}
-}
-
-function migrateLegacyClientId() {
-  var stored = String(pref("simkl_client_id", "") || "").trim();
-  if (!stored || !isLegacyClientId(stored)) return stored;
-  log("Replacing AUTH V1 client_id with the bundled AUTH V2 app");
-  persistClientId(DEFAULT_CLIENT_ID);
-  return DEFAULT_CLIENT_ID;
-}
-
 function getClientId() {
-  var stored = String(pref("simkl_client_id", "") || "").trim();
-  if (!stored || isLegacyClientId(stored)) return DEFAULT_CLIENT_ID;
-  return stored;
-}
-
-function hasCredentials() {
-  return !!getClientId();
+  return CLIENT_ID;
 }
 
 function sleep(ms) {
@@ -266,10 +235,6 @@ function requiredHeaders(accessToken, method) {
   }
   if (accessToken) headers.Authorization = "Bearer " + accessToken;
   return headers;
-}
-
-function isCatalogPath(path) {
-  return /^\/(movies|tv|anime)(\/|$)/.test(String(path || ""));
 }
 
 function isOAuthPath(path) {
@@ -598,9 +563,6 @@ async function sendWithRetries(method, path, settings) {
 }
 
 async function rawRequest(method, path, options) {
-  if (!getClientId()) {
-    throw new Error("Missing Simkl client_id. Add it in the plugin preferences.");
-  }
   var verb = String(method || "GET").toUpperCase();
   var settings = options || {};
   log("HTTP " + verb + " " + path);
@@ -762,7 +724,7 @@ function persistOAuthToken(body, previous) {
 }
 
 function invalidClientMessage() {
-  return "This client_id is not enabled for OAuth 2.0. Register a Mobile, desktop & browser AUTH V2 app with redirect http://127.0.0.1/callback, or leave the client ID field empty to use the plugin's app.";
+  return "Simkl rejected this app's client ID. Try Connect again.";
 }
 
 function createAuthStatus(state, summary, detail, busy, extras) {
@@ -790,14 +752,6 @@ function getAuthStatus() {
         ? "Approve " + runtime.authCode + " at simkl.com/pin, or use the page that just opened."
         : "Approve access in your browser, then return to IINA.",
       true
-    );
-  }
-  if (!hasCredentials()) {
-    return createAuthStatus(
-      "missing_credentials",
-      "Simkl client ID required",
-      "Create an AUTH V2 app at simkl.com/settings/developer as Mobile, desktop & browser, register http://127.0.0.1/callback, and paste the client_id — or leave it blank to use the plugin's app.",
-      false
     );
   }
   if (hasLegacyToken()) {
@@ -1088,7 +1042,7 @@ function parseRedirectLocation(location) {
 }
 
 async function resolveRedirect(query) {
-  var response = await rawRequest("GET", "/redirect", {
+  var response = await authedRequest("GET", "/redirect", {
     query: query,
     followRedirects: false,
   });
@@ -1238,7 +1192,7 @@ async function enrichMatch(match) {
 
   for (var i = 0; i < paths.length; i += 1) {
     try {
-      var response = await rawRequest("GET", paths[i]);
+      var response = await authedRequest("GET", paths[i]);
       if (response.statusCode >= 400 || !response.body) continue;
       var body = response.body;
       if (body.title && !media.isWeakTitle(body.title)) {
@@ -1324,7 +1278,7 @@ function pickDirectSequel(body) {
 }
 
 async function fetchAnimeDetail(id) {
-  var response = await rawRequest("GET", "/anime/" + id);
+  var response = await authedRequest("GET", "/anime/" + id);
   if (response.statusCode >= 400 || !response.body || media.isEmptyMatch(response.body)) return null;
   return response.body;
 }
@@ -1514,9 +1468,6 @@ async function ensureFreshAccessToken() {
 }
 
 async function authedRequest(method, path, options) {
-  if (isCatalogPath(path)) {
-    return rawRequest(method, path, options);
-  }
   await ensureFreshAccessToken();
   var token = getAccessToken();
   if (!token) {
@@ -1697,10 +1648,6 @@ function buildAuthorizeUrl(challenge, state, redirectUri) {
 async function runBrowserAuth(restart) {
   if (runtime.authPromise && !restart) return runtime.authPromise;
   runtime.authPromise = (async function () {
-    if (!hasCredentials()) {
-      throw new Error("Missing Simkl client_id");
-    }
-
     var pkce = await generatePkce();
     var listen = await startLoopbackListener();
     var redirectUri = String(listen.redirect_uri || "");
@@ -1833,9 +1780,6 @@ async function signOut() {
 }
 
 async function scrobble(action, current, progress) {
-  if (!hasCredentials()) {
-    return { ok: false, skip: true, reason: "missing-client-credentials" };
-  }
   if (!getAccessToken()) {
     return { ok: false, skip: true, reason: hasLegacyToken() ? "legacy-auth" : "auth-required" };
   }
@@ -1927,7 +1871,6 @@ module.exports = {
   getAuthStatus: getAuthStatus,
   getClientId: getClientId,
   getViewerProfile: getViewerProfile,
-  hasCredentials: hasCredentials,
   identifyFile: identifyFile,
   isAuthRequiredError: isAuthRequiredError,
   scrobble: scrobble,

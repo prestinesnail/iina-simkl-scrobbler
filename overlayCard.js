@@ -37,12 +37,7 @@ function clampOverlayOffsetPx(value) {
 }
 
 function skipCornerForOverlay(position) {
-  var pos = normalizeOverlayPosition(position);
-  if (pos === "bottom-right") return "bottom-left";
-  if (pos === "top-left") return "top-right";
-  if (pos === "top-right") return "top-left";
-  if (pos === "top-center") return "bottom-right";
-  return "bottom-right";
+  return normalizeOverlayPosition(position) === "bottom-right" ? "bottom-left" : "bottom-right";
 }
 
 function overlayInset(offsetPx, oscClearancePx, edge) {

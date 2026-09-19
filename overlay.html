@@ -283,6 +283,8 @@
       transition: opacity 0.55s ease, transform 0.55s ease, visibility 0s linear 0.55s, top 0.25s ease, right 0.25s ease, bottom 0.25s ease, left 0.25s ease;
     }
     html.pos-bottom-left #skip-wrap,
+    html.pos-top-left #skip-wrap,
+    html.pos-top-right #skip-wrap,
     html.pos-top-center #skip-wrap {
       right: var(--overlay-offset, 24px);
       bottom: calc(var(--overlay-offset, 24px) + var(--osc-clearance, 0px));
@@ -291,16 +293,6 @@
     html.pos-bottom-right #skip-wrap {
       left: var(--overlay-offset, 24px);
       bottom: calc(var(--overlay-offset, 24px) + var(--osc-clearance, 0px));
-      transform: translateX(-18px);
-    }
-    html.pos-top-left #skip-wrap {
-      right: var(--overlay-offset, 24px);
-      top: var(--overlay-offset, 24px);
-      transform: translateX(18px);
-    }
-    html.pos-top-right #skip-wrap {
-      left: var(--overlay-offset, 24px);
-      top: var(--overlay-offset, 24px);
       transform: translateX(-18px);
     }
     #skip-wrap.visible {

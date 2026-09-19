@@ -5,20 +5,6 @@
 </head>
 <body>
   <div class="pref-section">
-    Simkl client ID
-    <div style="margin-top: 2px">
-      <input type="text" data-pref-key="simkl_client_id" style="width: 100%; margin-top: 2px" spellcheck="false">
-    </div>
-    <p class="small secondary pref-help">
-      Leave this blank to use the plugin’s AUTH V2 app. To use your own, create a
-      <strong>Mobile, desktop &amp; browser</strong> app at
-      <a href="https://simkl.com/settings/developer/new/">simkl.com/settings/developer</a>
-      with redirect <code>http://127.0.0.1/callback</code> and paste that <code>client_id</code>.
-      No client secret. A V1 / older app ID will not work.
-    </p>
-  </div>
-
-  <div class="pref-section">
     <label>
       <input type="checkbox" data-type="bool" data-pref-key="scrobble_enabled">
       Enable scrobbling
@@ -124,7 +110,7 @@
       <input type="number" data-type="int" data-pref-key="overlay_offset_px" min="0" max="240" step="1" style="width: 120px">
     </div>
     <p class="small secondary pref-help">
-      Inset the poster card this many pixels from the chosen edge. Top-Center uses the offset from the top only. The Skip Intro button moves to the opposite corner so it does not cover the card. Range 0–240.
+      Inset the poster card this many pixels from the chosen edge. Top-Center uses the offset from the top only. Skip Intro stays in the bottom-right unless the card is also bottom-right, in which case Skip Intro moves to the bottom-left. Range 0–240.
     </p>
   </div>
 
