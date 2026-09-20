@@ -88,6 +88,7 @@ var authResyncAt = 0;
 var activeSimklSession = false;
 var flushStopInFlight = null;
 var lastStoppedKey = "";
+var lastStoppedPath = "";
 var mpvUnavailable = false;
 var lastPlaybackTimes = {
   position: 0,
@@ -105,6 +106,7 @@ var overlayPlaybackPaintAt = 0;
 var lastOverlayLayoutSignature = "";
 var OSC_POSITION_BOTTOM = 2;
 var OSC_BOTTOM_CLEARANCE_PX = 48;
+var COMPLETE_AT_PERCENT = 85;
 var volumeDuck = createVolumeDuckState();
 
 function createScrobbleStatus() {
@@ -1223,6 +1225,9 @@ function skipCurrentIntro() {
   clearSkipHideTimer();
   clearSkipFadeTimer();
   paintOverlay();
+  if (segment.type === "outro" || isPlaybackCompleteProgress(currentProgress())) {
+    markPlaybackComplete(segment.type === "outro" ? "skip-outro" : "skip-complete");
+  }
   if (!seekToSeconds(segment.endSec)) {
     importantOsd("Could not skip " + String(segment.label || "intro").toLowerCase());
     return;
@@ -1654,7 +1659,7 @@ async function syncPlaybackToSimkl(reason) {
   var match = current.media;
   if (!match || !match.matched) return;
   if (current.path !== currentPath()) return;
-  if (lastStoppedKey && media.mediaKey(match) === lastStoppedKey) return;
+  if (scrobbleClosedForCurrent()) return;
   if (core.status.idle) return;
   var percent = await waitForReliableProgress();
   if (percent == null) return;
@@ -2141,6 +2146,10 @@ function syncCurrentPlayback(reason) {
     queueSidebarRefresh(false);
     return Promise.resolve();
   }
+  if (scrobbleClosedForCurrent()) {
+    paintOverlayPlayback();
+    return Promise.resolve();
+  }
   if (core.status.idle) return Promise.resolve();
   var fields = playbackDispatchFields();
   if (lastHandledPause !== null && lastHandledPause !== fields.paused) {
@@ -2199,6 +2208,27 @@ function withTimeout(promise, ms, label) {
   });
 }
 
+function clearStoppedScrobbleLock() {
+  lastStoppedKey = "";
+  lastStoppedPath = "";
+}
+
+function isPlaybackCompleteProgress(progress) {
+  return Number(progress) >= COMPLETE_AT_PERCENT;
+}
+
+function markPlaybackComplete(reason) {
+  if (scrobbleClosedForCurrent()) return Promise.resolve();
+  return flushStop(reason || "complete", { completed: true, progress: 100 });
+}
+
+function scrobbleClosedForCurrent() {
+  if (!lastStoppedKey) return false;
+  var playingPath = currentPath() || current.path;
+  if (lastStoppedPath && playingPath && lastStoppedPath !== playingPath) return false;
+  return !!(current.media && current.media.matched && media.mediaKey(current.media) === lastStoppedKey);
+}
+
 function watchingSessionOpen() {
   if (activeSimklSession) return true;
   var phase = playbackSession && playbackSession.phase;
@@ -2230,6 +2260,7 @@ async function flushStop(reason, options) {
   }
   var captured = match;
   lastStoppedKey = media.mediaKey(captured);
+  lastStoppedPath = current.path || currentPath();
   closeWatchingSessionLocally();
   log("Stopping Simkl watching session (" + reason + ") at " + progress + "%");
   flushStopInFlight = (async function () {
@@ -2252,7 +2283,11 @@ function bindUnloadHook() {
       try {
         restoreVolumeDuck("on_unload");
         var times = stopProgressSnapshot();
-        await flushStop("on_unload", { progress: times.percent });
+        var complete = isPlaybackCompleteProgress(times.percent);
+        await flushStop("on_unload", {
+          completed: complete,
+          progress: complete ? 100 : times.percent,
+        });
       } catch (error) {
         log("on_unload stop failed: " + errStr(error));
       }
@@ -2270,6 +2305,16 @@ function enqueueScrobble(action, progress, deferred, match) {
   var sentAt = Number(playbackSession && playbackSession.lastSentAt || lastSimklSentAt || 0);
   scrobbleChain = scrobbleChain
     .then(async function () {
+      if (
+        (action === "start" || action === "pause") &&
+        lastStoppedKey &&
+        captured &&
+        captured.matched &&
+        media.mediaKey(captured) === lastStoppedKey &&
+        (!lastStoppedPath || lastStoppedPath === (currentPath() || current.path))
+      ) {
+        return;
+      }
       if (deferred) {
         var wait = Math.max(0, 20000 - (Date.now() - sentAt));
         if (wait) await new Promise(function (resolve) { setTimeout(resolve, wait); });
@@ -2525,7 +2570,12 @@ async function handleNewFile() {
   var previousProgress = currentProgress();
   var fileChanged = !!(lastSourceSignature && lastSourceSignature !== signature);
   if (fileChanged) {
-    await flushStop("file-change", { progress: previousProgress });
+    if (isPlaybackCompleteProgress(previousProgress)) {
+      await markPlaybackComplete("file-change");
+    } else {
+      await flushStop("file-change", { progress: previousProgress });
+    }
+    clearStoppedScrobbleLock();
   }
   lastSourceSignature = signature;
   if (fileChanged || !playbackSession || !playbackSession.itemKey) {
@@ -2539,7 +2589,6 @@ async function handleNewFile() {
   }
   if (current.identifying && current.path === currentPath()) return;
   await identifyCurrentFile();
-  lastStoppedKey = "";
 }
 
 async function handlePlaybackStarted() {
@@ -2550,7 +2599,7 @@ async function handlePlaybackStarted() {
   if (current.path !== currentPath()) return;
   var match = current.media;
   if (!match || !match.matched) return;
-  if (lastStoppedKey && media.mediaKey(match) === lastStoppedKey) return;
+  if (scrobbleClosedForCurrent()) return;
   await syncPlaybackToSimkl("playback-started");
 }
 
@@ -2567,7 +2616,12 @@ function noteSeeking() {
 }
 
 async function handleSeekSettled() {
-  log("Seek settled at " + Number(currentProgress() || 0).toFixed(1) + "%");
+  var progress = currentProgress();
+  log("Seek settled at " + Number(progress || 0).toFixed(1) + "%");
+  if (isPlaybackCompleteProgress(progress)) {
+    await markPlaybackComplete("seek-complete");
+    return;
+  }
   await syncCurrentPlayback("seek");
 }
 
@@ -2578,6 +2632,11 @@ async function handlePauseChanged() {
   var match = current.media;
   if (!match || !match.matched) return;
   showNowPlayingOverlay(match, true, paused ? "hold" : "resume");
+  if (scrobbleClosedForCurrent()) return;
+  if (paused && isPlaybackCompleteProgress(currentProgress())) {
+    await markPlaybackComplete("pause-complete");
+    return;
+  }
   var fields = playbackDispatchFields();
   await dispatch(
     Object.assign(
@@ -3103,7 +3162,9 @@ event.on(
   "mpv.end-file",
   wrap("end-file", function () {
     var times = stopProgressSnapshot();
-    var completed = media.isNearEnd(times.position, times.duration, trustedDuration);
+    var completed =
+      media.isNearEnd(times.position, times.duration, trustedDuration) ||
+      isPlaybackCompleteProgress(times.percent);
     return flushStop("end-file", {
       completed: completed,
       progress: completed ? 100 : times.percent,
@@ -3130,7 +3191,12 @@ event.on(
     try {
       if (overlay && typeof overlay.hide === "function") overlay.hide();
     } catch (_error) {}
-    return flushStop("window-will-close", { progress: stopProgressSnapshot().percent });
+    var closeTimes = stopProgressSnapshot();
+    var closeComplete = isPlaybackCompleteProgress(closeTimes.percent);
+    return flushStop("window-will-close", {
+      completed: closeComplete,
+      progress: closeComplete ? 100 : closeTimes.percent,
+    });
   })
 );
 event.on(
@@ -3138,7 +3204,12 @@ event.on(
   wrap("window-did-close", function () {
     windowClosing = true;
     markMpvUnavailable();
-    return flushStop("window-did-close", { progress: stopProgressSnapshot().percent });
+    var didCloseTimes = stopProgressSnapshot();
+    var didCloseComplete = isPlaybackCompleteProgress(didCloseTimes.percent);
+    return flushStop("window-did-close", {
+      completed: didCloseComplete,
+      progress: didCloseComplete ? 100 : didCloseTimes.percent,
+    });
   })
 );
 try {
@@ -3149,7 +3220,12 @@ try {
       windowClosing = true;
       markMpvUnavailable();
       stopRuntimeTimers();
-      return flushStop("mpv.shutdown", { progress: stopProgressSnapshot().percent });
+      var shutdownTimes = stopProgressSnapshot();
+      var shutdownComplete = isPlaybackCompleteProgress(shutdownTimes.percent);
+      return flushStop("mpv.shutdown", {
+        completed: shutdownComplete,
+        progress: shutdownComplete ? 100 : shutdownTimes.percent,
+      });
     })
   );
 } catch (error) {

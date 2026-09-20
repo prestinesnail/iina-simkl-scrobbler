@@ -65,14 +65,32 @@
       top: var(--overlay-offset, 24px);
       transform: translate(-50%, -8px);
     }
+    html.pos-top-full .np,
+    html.pos-bottom-full .np {
+      left: var(--overlay-offset, 24px);
+      right: var(--overlay-offset, 24px);
+      min-width: 0;
+      max-width: none;
+      width: auto;
+    }
+    html.pos-top-full .np {
+      top: var(--overlay-offset, 24px);
+      transform: translateY(-8px);
+    }
+    html.pos-bottom-full .np {
+      bottom: calc(var(--overlay-offset, 24px) + var(--osc-clearance, 0px));
+      transform: translateY(8px);
+    }
     .np.visible {
       opacity: 1;
       pointer-events: auto;
     }
     html.pos-bottom-left .np.visible,
-    html.pos-bottom-right .np.visible { transform: translateY(0); }
+    html.pos-bottom-right .np.visible,
+    html.pos-bottom-full .np.visible { transform: translateY(0); }
     html.pos-top-left .np.visible,
-    html.pos-top-right .np.visible { transform: translateY(0); }
+    html.pos-top-right .np.visible,
+    html.pos-top-full .np.visible { transform: translateY(0); }
     html.pos-top-center .np.visible { transform: translate(-50%, 0); }
     .np.visible.has-link { cursor: pointer; }
     .np.visible.fading {
@@ -80,9 +98,11 @@
       pointer-events: auto;
     }
     html.pos-bottom-left .np.visible.fading,
-    html.pos-bottom-right .np.visible.fading { transform: translateY(0); }
+    html.pos-bottom-right .np.visible.fading,
+    html.pos-bottom-full .np.visible.fading { transform: translateY(0); }
     html.pos-top-left .np.visible.fading,
-    html.pos-top-right .np.visible.fading { transform: translateY(0); }
+    html.pos-top-right .np.visible.fading,
+    html.pos-top-full .np.visible.fading { transform: translateY(0); }
     html.pos-top-center .np.visible.fading { transform: translate(-50%, 0); }
     .np.visible.fading.peek { opacity: 1; }
     .np-bg {
@@ -291,7 +311,8 @@
     html.pos-bottom-left #skip-wrap,
     html.pos-top-left #skip-wrap,
     html.pos-top-right #skip-wrap,
-    html.pos-top-center #skip-wrap {
+    html.pos-top-center #skip-wrap,
+    html.pos-top-full #skip-wrap {
       right: var(--overlay-offset, 24px);
       bottom: calc(var(--overlay-offset, 24px) + var(--osc-clearance, 0px));
       transform: translateX(18px);
@@ -300,6 +321,11 @@
       left: var(--overlay-offset, 24px);
       bottom: calc(var(--overlay-offset, 24px) + var(--osc-clearance, 0px));
       transform: translateX(-18px);
+    }
+    html.pos-bottom-full #skip-wrap {
+      right: var(--overlay-offset, 24px);
+      top: var(--overlay-offset, 24px);
+      transform: translateX(18px);
     }
     #skip-wrap.visible {
       visibility: visible;
@@ -310,7 +336,9 @@
     html.pos-bottom-right #skip-wrap.visible,
     html.pos-top-left #skip-wrap.visible,
     html.pos-top-right #skip-wrap.visible,
-    html.pos-top-center #skip-wrap.visible {
+    html.pos-top-center #skip-wrap.visible,
+    html.pos-top-full #skip-wrap.visible,
+    html.pos-bottom-full #skip-wrap.visible {
       transform: translateX(0);
     }
     #skip-wrap.visible.fading {
@@ -574,7 +602,7 @@
 
       function applyLayout(state) {
         var pos = String((state && state.position) || "bottom-left");
-        if (!/^(top-left|bottom-left|top-right|bottom-right|top-center)$/.test(pos)) pos = "bottom-left";
+        if (!/^(top-left|bottom-left|top-right|bottom-right|top-center|top-full|bottom-full)$/.test(pos)) pos = "bottom-left";
         var offset = Number(state && state.offsetPx);
         if (!isFinite(offset)) offset = 24;
         if (offset < 0) offset = 0;
@@ -587,7 +615,9 @@
           "pos-bottom-left",
           "pos-top-right",
           "pos-bottom-right",
-          "pos-top-center"
+          "pos-top-center",
+          "pos-top-full",
+          "pos-bottom-full"
         );
         document.documentElement.classList.add("pos-" + pos);
       }

@@ -13,7 +13,15 @@ function kindLabel(kind) {
 }
 
 var FADE_MS = 550;
-var OVERLAY_POSITIONS = ["top-left", "bottom-left", "top-right", "bottom-right", "top-center"];
+var OVERLAY_POSITIONS = [
+  "top-left",
+  "bottom-left",
+  "top-right",
+  "bottom-right",
+  "top-center",
+  "top-full",
+  "bottom-full",
+];
 var DEFAULT_OVERLAY_POSITION = "bottom-left";
 var DEFAULT_OVERLAY_OFFSET_PX = 24;
 var MAX_OVERLAY_OFFSET_PX = 240;
@@ -37,7 +45,10 @@ function clampOverlayOffsetPx(value) {
 }
 
 function skipCornerForOverlay(position) {
-  return normalizeOverlayPosition(position) === "bottom-right" ? "bottom-left" : "bottom-right";
+  var pos = normalizeOverlayPosition(position);
+  if (pos === "bottom-right") return "bottom-left";
+  if (pos === "bottom-full") return "top-right";
+  return "bottom-right";
 }
 
 function overlayInset(offsetPx, oscClearancePx, edge) {
@@ -72,6 +83,18 @@ function overlayCSS(options) {
       "bottom: " + overlayInset(offsetPx, osc, "bottom") + ";",
       "right: " + overlayInset(offsetPx, osc, "right") + ";"
     );
+  } else if (position === "top-full") {
+    npPos.push(
+      "top: " + overlayInset(offsetPx, osc, "top") + ";",
+      "left: " + overlayInset(offsetPx, osc, "left") + ";",
+      "right: " + overlayInset(offsetPx, osc, "right") + ";"
+    );
+  } else if (position === "bottom-full") {
+    npPos.push(
+      "bottom: " + overlayInset(offsetPx, osc, "bottom") + ";",
+      "left: " + overlayInset(offsetPx, osc, "left") + ";",
+      "right: " + overlayInset(offsetPx, osc, "right") + ";"
+    );
   } else {
     npPos.push(
       "bottom: " + overlayInset(offsetPx, osc, "bottom") + ";",
@@ -97,7 +120,10 @@ function overlayCSS(options) {
     "html, body { margin: 0; width: 100%; height: 100%; background: transparent !important; overflow: hidden; }",
     ".content { position: absolute; inset: 0; pointer-events: none; background: transparent; }",
     ".np { position: absolute; " + npPos.join(" ") + " display: flex; align-items: stretch; gap: 16px;",
-    "min-width: 520px; max-width: 74vw; padding: 14px 18px 14px 14px; border-radius: 18px; color: #f6f7fb; overflow: hidden;",
+    (position === "top-full" || position === "bottom-full"
+      ? "min-width: 0; max-width: none; width: auto; "
+      : "min-width: 520px; max-width: 74vw; ") +
+      "padding: 14px 18px 14px 14px; border-radius: 18px; color: #f6f7fb; overflow: hidden;",
     "background: rgba(8, 8, 12, 0.84); border: 1px solid rgba(255,255,255,0.12);",
     "box-shadow: 0 22px 60px rgba(0,0,0,0.55); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;",
     "opacity: " + (fading ? "0" : "1") + "; transition: opacity " + fadeSec + "; }",

@@ -10,7 +10,7 @@
       Enable scrobbling
     </label>
     <p class="small secondary pref-help">
-      Send play, pause, and stop events to Simkl. Titles are marked watched at 80% on stop.
+      Send play, pause, and stop events to Simkl. Pause, seek, skip, stop, or next file at 85% or more sends stop at 100% (watched).
     </p>
   </div>
 
@@ -95,12 +95,14 @@
   <div class="pref-section">
     Overlay position
     <div style="margin-top: 2px">
-      <select id="overlay-position" style="width: 180px">
+      <select id="overlay-position" style="width: 200px">
         <option value="top-left">Top-Left</option>
         <option value="bottom-left">Bottom-Left</option>
         <option value="top-right">Top-Right</option>
         <option value="bottom-right">Bottom-Right</option>
         <option value="top-center">Top-Center</option>
+        <option value="top-full">Top-Full</option>
+        <option value="bottom-full">Bottom-Full</option>
       </select>
     </div>
     <p class="small secondary pref-help" style="margin-top: 8px; margin-bottom: 4px">
@@ -110,7 +112,7 @@
       <input type="number" data-type="int" data-pref-key="overlay_offset_px" min="0" max="240" step="1" style="width: 120px">
     </div>
     <p class="small secondary pref-help">
-      Inset the poster card this many pixels from the chosen edge. Top-Center uses the offset from the top only. Skip Intro stays in the bottom-right unless the card is also bottom-right, in which case Skip Intro moves to the bottom-left. Range 0–240.
+      Inset the poster card this many pixels from the chosen edge. Top-Center uses the offset from the top only. Top-Full and Bottom-Full stretch with the window: the offset is the gap from the top or bottom and from both sides. Height stays the same. Skip Intro stays in the bottom-right unless the card is bottom-right (then bottom-left) or Bottom-Full (then top-right). Range 0–240.
     </p>
   </div>
 
@@ -190,7 +192,9 @@
           next !== "bottom-left" &&
           next !== "top-right" &&
           next !== "bottom-right" &&
-          next !== "top-center"
+          next !== "top-center" &&
+          next !== "top-full" &&
+          next !== "bottom-full"
         ) {
           next = "bottom-left";
         }

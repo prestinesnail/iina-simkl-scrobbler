@@ -2,7 +2,7 @@ var media = require("./media.js");
 
 var API_ROOT = "https://api.simkl.com";
 var APP_NAME = "iina-simkl-scrobbler";
-var PLUGIN_VERSION = "1.1.32";
+var PLUGIN_VERSION = "1.1.33";
 var USER_AGENT = "iina-simkl-scrobbler/" + PLUGIN_VERSION;
 var TOKEN_PATH = "@data/simkl-token.json";
 var CACHE_PATH = "@data/simkl-match-cache.json";
@@ -923,13 +923,16 @@ function rememberShow(match) {
 }
 
 function cachedShowMatch(path, filename) {
-  var ids = media.extractExternalIds(String(path || "") + " " + String(filename || ""));
+  var leaf = media.extractFilename(path) || filename;
+  var ids = Object.assign({}, media.extractExternalIds(path), media.extractExternalIds(leaf));
   var keys = showCacheKeysFromIds(ids);
   if (!keys.length) return null;
   var cache = loadMatchCache();
+  var movieLike = media.looksLikeStandaloneMovie(leaf);
   for (var i = 0; i < keys.length; i += 1) {
     var record = cache[keys[i]];
     if (!record || !record.matched) continue;
+    if (movieLike && record.kind !== "movie" && record.animeType !== "movie") continue;
     return media.applyEpisodeFromFilename(media.mediaFromCache(record, filename), filename);
   }
   return null;
@@ -1114,7 +1117,13 @@ async function resolveRedirect(query) {
 }
 
 async function identifyByExternalId(filePath, filename) {
-  var ids = media.extractExternalIds(String(filePath || "") + " " + String(filename || ""));
+  var leaf = media.extractFilename(filePath) || filename;
+  var leafIds = media.extractExternalIds(leaf);
+  var pathIds = media.extractExternalIds(filePath);
+  var ids = Object.assign({}, pathIds, leafIds);
+  if (!leafIds.imdb && !leafIds.tmdb && !leafIds.tvdb && media.looksLikeStandaloneMovie(leaf)) {
+    ids = leafIds;
+  }
   if (!ids.imdb && !ids.tmdb && !ids.tvdb) return null;
   var query = { to: "simkl" };
   if (ids.imdb) query.imdb = ids.imdb;
@@ -1165,6 +1174,17 @@ async function identifyFile(filePath, options) {
 
   if (!settings.force) {
     var cached = cachedMatch(filename, path);
+    if (
+      cached &&
+      cached.matched &&
+      isTrustedMatch(cached) &&
+      media.looksLikeStandaloneMovie(filename) &&
+      cached.kind !== "movie" &&
+      !media.isAnimeMovie(cached)
+    ) {
+      log("Ignoring episodic cache for movie-like file " + filename);
+      cached = null;
+    }
     if (cached && cached.matched && isTrustedMatch(cached)) {
       if (!hasCatalogFields(cached)) {
         cached = await enrichMatch(cached);
@@ -1279,6 +1299,10 @@ async function enrichMatch(match) {
       if (body.ids && body.ids.slug) match.slug = body.ids.slug;
       if (paths[i].indexOf("/anime/") === 0) match.kind = "anime";
       if (paths[i].indexOf("/movies/") === 0) match.kind = "movie";
+      var animeType = String(body.anime_type || body.type || "").toLowerCase();
+      if (match.kind === "anime" && (animeType === "movie" || animeType === "film")) {
+        match.animeType = "movie";
+      }
       match.url = media.simklItemUrl(match.kind, Object.assign({}, match.ids, { slug: match.slug }));
       match.ids = media.sanitizeIds(Object.assign({}, match.ids, body.ids || {}));
       break;
@@ -1378,6 +1402,7 @@ function applyAnimeDetail(match, body, filename) {
 
 async function followAnimeSequel(match) {
   if (!match || !match.matched || match.kind !== "anime") return match;
+  if (media.isAnimeMovie(match)) return match;
   var hint = media.parseEpisodeHint(match.filename || "");
   if (!hint || !hint.season || hint.season <= 1) return match;
   var target = hint.season;
@@ -1859,7 +1884,7 @@ async function scrobble(action, current, progress) {
   if (!current || !current.matched) {
     return { ok: false, skip: true, reason: "missing-simkl-match" };
   }
-  if ((current.kind === "show" || current.kind === "anime") && !current.number) {
+  if (media.needsEpisode(current)) {
     return { ok: false, skip: true, reason: "missing-episode" };
   }
 

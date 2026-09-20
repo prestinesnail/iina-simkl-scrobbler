@@ -178,19 +178,40 @@ function fileSearchQueries(url) {
   return queries;
 }
 
+function lastRegexCapture(text, pattern) {
+  var re = new RegExp(pattern, "gi");
+  var last = null;
+  var match;
+  while ((match = re.exec(text))) last = match;
+  return last;
+}
+
 function extractExternalIds(value) {
   var text = String(value || "");
   var ids = {};
   var imdb =
-    text.match(/\{imdb[-:]?(tt\d{7,})\}/i) ||
-    text.match(/[{\[](tt\d{7,})[}\]]/i) ||
-    text.match(/imdb[-:](tt\d{7,})/i);
+    lastRegexCapture(text, "\\{imdb[-:]?(tt\\d{7,})\\}") ||
+    lastRegexCapture(text, "[{\\[](tt\\d{7,})[}\\]]") ||
+    lastRegexCapture(text, "imdb[-:](tt\\d{7,})");
   if (imdb) ids.imdb = String(imdb[1]).toLowerCase();
-  var tmdb = text.match(/\{tmdb[-:](\d+)\}/i);
+  var tmdb = lastRegexCapture(text, "\\{tmdb[-:](\\d+)\\}");
   if (tmdb) ids.tmdb = tmdb[1];
-  var tvdb = text.match(/\{tvdb[-:](\d+)\}/i);
+  var tvdb = lastRegexCapture(text, "\\{tvdb[-:](\\d+)\\}");
   if (tvdb) ids.tvdb = tvdb[1];
   return ids;
+}
+
+function looksLikeStandaloneMovie(filename) {
+  var name = String(filename || "");
+  if (parseEpisodeHint(name)) return false;
+  if (/\b(?:movie|film|gekijouban|the[- ]movie)\b/i.test(name)) return true;
+  if (/\((?:19|20)\d{2}\)/.test(name)) return true;
+  return false;
+}
+
+function isAnimeMovie(item) {
+  var type = String((item && (item.animeType || item.type)) || "").toLowerCase();
+  return !!(item && item.kind === "anime" && (type === "movie" || type === "film"));
 }
 
 function normalizeTitle(value) {
@@ -649,6 +670,7 @@ function createMedia(values) {
     slug: trim(media.slug),
     source: media.source || "search-file",
     catalogTitle: cleanTitle(media.catalogTitle),
+    animeType: trim(media.animeType),
     trusted: media.trusted !== false && !isWeakTitle(media.catalogTitle || media.title),
   };
 }
@@ -759,6 +781,7 @@ function mediaFromSearchResult(result, filename, hint, options) {
 }
 
 function needsEpisode(media) {
+  if (isAnimeMovie(media)) return false;
   return !!(media && (media.kind === "show" || media.kind === "anime") && !media.number);
 }
 
@@ -891,6 +914,7 @@ function cacheRecord(media) {
     slug: media.slug,
     source: media.source,
     catalogTitle: media.catalogTitle,
+    animeType: media.animeType || "",
     trusted: media.trusted !== false,
     cachedAt: new Date().toISOString(),
   };
@@ -922,10 +946,12 @@ module.exports = {
   fileSearchQueries: fileSearchQueries,
   cleanedSearchName: cleanedSearchName,
   formatDuration: formatDuration,
+  isAnimeMovie: isAnimeMovie,
   isAnimeIds: isAnimeIds,
   isEmptyMatch: isEmptyMatch,
   isWeakTitle: isWeakTitle,
   looksLikeEnglishPhrase: looksLikeEnglishPhrase,
+  looksLikeStandaloneMovie: looksLikeStandaloneMovie,
   matchFromSearchFile: matchFromSearchFile,
   mediaFromCache: mediaFromCache,
   mediaFromSearchResult: mediaFromSearchResult,

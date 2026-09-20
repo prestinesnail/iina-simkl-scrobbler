@@ -6,7 +6,7 @@ Requires **IINA 1.4.0** or later.
 
 ![Now-playing overlay showing Simkl watch progress](docs/now-playing-overlay.jpg)
 
-The overlay shows the matched title, live progress, and time left. Episode chips match Simkl: **S01E01** for TV, **Ep. 9** for anime, nothing for movies. Click the card to open the title on Simkl. Hover anywhere in the player after it fades to bring it back. Plugin settings choose the card corner (Top-Left, Bottom-Left, Top-Right, Bottom-Right, or Top-Center) and a pixel inset. Skip Intro / Recap / Outro / Preview stays in the bottom-right, and only moves to the bottom-left when the card is also bottom-right.
+The overlay shows the matched title, live progress, and time left. Episode chips match Simkl: **S01E01** for TV, **Ep. 9** for anime, nothing for movies. Click the card to open the title on Simkl. Hover anywhere in the player after it fades to bring it back. Plugin settings choose the card corner (Top-Left, Bottom-Left, Top-Right, Bottom-Right, or Top-Center), a full-width bar (Top-Full or Bottom-Full), and a pixel inset. Full-width modes stretch with the window: the offset is the gap from the top or bottom and from both sides; height stays the same. Skip Intro / Recap / Outro / Preview stays in the bottom-right, moves to the bottom-left when the card is bottom-right, and moves to the top-right when the card is Bottom-Full.
 
 ## Install
 
@@ -78,19 +78,19 @@ Play a movie or episode in IINA. The plugin identifies the file, sends Simkl `st
 | You do this | What happens |
 | --- | --- |
 | Play a matched file | Simkl **Now Watching** starts; overlay appears |
-| Pause | Simkl saves a resume point and pauses Now Watching |
+| Pause | Simkl saves a resume point, unless progress is **85% or higher** — then it sends `stop` at 100% (watched) and stops scrobbling that file |
 | Resume | Simkl starts again at the current progress; overlay shows briefly |
-| Scrub / skip | Local overlay updates immediately. If the jump is large, a new Simkl `start` or `pause` is sent after the 20s lock so **Watching now** is not stuck interpolating from the old position |
-| Stop, close the window, quit IINA, or play the next file | Simkl `stop` — watched if progress is **80% or higher** |
+| Scrub / skip | Local overlay updates immediately. Below 85%, a large seek may send `start` or `pause` after the 20s lock. At **85% or higher**, any seek, skip, pause, stop, or next file sends `stop` at 100% and does not scrobble that file again |
+| Stop, close the window, quit IINA, or play the next file | Simkl `stop`. At **85% or higher**, that stop is 100% (watched) |
 | Let the file end (≥ 95%) | Simkl `stop` at 100% |
 | Hover the player after the overlay fades | Overlay peeks back in |
 | Click the overlay card | Opens the title on Simkl |
-| Skip Intro / Recap / Outro / Preview | Seeks to the end of that IntroDB or file-chapter segment |
+| Skip Intro / Recap / Outro / Preview | Seeks to the end of that IntroDB or file-chapter segment. Skip Outro also sends Simkl `stop` at 100% (watched) and does not scrobble anything after that on the same file |
 | Intro or outro playing | Volume ducks to the setting percent (default 75%), then restores |
 
 If the wrong title is matched, open the sidebar (`⌘K`) and use **Correct match**. **Mark as Watched** in the plugin menu sends `stop` at 100% for the current title.
 
-Simkl marks an item **watched** only on `stop` with progress ≥ 80. Pausing at 90% saves a resume point; it does not complete the watch.
+Simkl marks an item **watched** only on `stop` with progress ≥ 80. This plugin treats any pause, seek, skip, stop, or next-file at **85% or higher** as finished and sends `stop` at 100%. After that it does not scrobble that file again. Watching past 85% with no extra action still waits for a real stop or end.
 
 Playback POSTs happen on play, pause, stop, close, natural end, and after a **large seek** once Simkl’s 20-second lock allows — never on a heartbeat timer. Small scrubs still wait for the next pause or stop. A playlist advance is one `stop` for the finished episode, then one `start` for the next — not overlapping lookups or extra 409 stops. Simkl interpolates **Watching now** progress from the item runtime between those events. See [Simkl’s scrobble guide](https://api.simkl.org/guides/scrobble.md).
 
@@ -184,8 +184,8 @@ No other sites are contacted. The plugin does not send the file contents, only a
 | Show now-playing overlay | on | Poster card when a title starts |
 | Overlay display length | 8 seconds | How long the card stays fully visible at start (1–30) |
 | Overlay length after resume | 2 seconds | Hide delay after unpause unless the pointer is over the player (1–30) |
-| Overlay position | Bottom-Left | Poster card corner: Top-Left, Bottom-Left, Top-Right, Bottom-Right, or Top-Center |
-| Overlay offset | 24 px | Inset from that edge (0–240). Skip Intro stays bottom-right unless the card is there |
+| Overlay position | Bottom-Left | Corner, Top-Center, or full-width Top-Full / Bottom-Full |
+| Overlay offset | 24 px | Inset from the chosen edge, and from both sides in full-width mode (0–240) |
 | Show Skip Intro / Recap / Outro | on | IntroDB skip buttons, or OP/ED chapters in the file when IntroDB has none |
 | Track rewatches | off | On `stop` ≥ 80% of an already-finished title, log a separate viewing. Simkl Pro / VIP only. Never sent on play or pause |
 | Pause debounce | 400 ms | Ignore brief pauses from seeking (0–5000) |
