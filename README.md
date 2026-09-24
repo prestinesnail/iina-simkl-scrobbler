@@ -107,9 +107,11 @@ The plugin never hashes the file. It identifies from the **path and filename** I
 7. **Title-search fallback** — if file search fails, the plugin parses a title (and year / `SxxExx`) from the filename or parent folder and searches Simkl’s catalog. Short tokens such as “One” or “Love” are not trusted as the first catalog hit. A match is kept only when the normalized titles are exact, or word overlap is high **and** the year matches.
 8. **Manual override** — **Correct match** in the sidebar searches movies, TV, and anime and stores your choice.
 
-Episode numbers come from the filename (`S01E03`, `1x03`, anime `E01`) when Simkl returns a show without an episode. Movies use the `movie` wrapper. Regular TV uses `show` plus `episode.season` / `episode.number`. Anime uses the `anime` wrapper: MAL / AniDB / AniList-style IDs send a flat episode number; IMDb / TMDB / TVDB IDs also send season so Simkl can map cours.
+Episode numbers come from the filename (`S01E03`, `1x03`, anime `E01`) when Simkl returns a show without an episode. Movies use the `movie` wrapper. Regular TV uses `show` plus `episode.season` / `episode.number`. Anime that was named with an absolute episode (`E01`, no season) uses the `anime` wrapper and that flat episode number.
 
-For sequel seasons that Simkl stores as season 1 of a new series, the overlay can show the filename season (for example `S02E06`) while the scrobble still uses Simkl’s season/episode IDs.
+Simkl stores each cour as its own series, so TVDB season 1 can continue into “Part 2” while the filename still says `S01E12`. When the filename has a season (`S01E12` or `1x12`) and the match has a TVDB, TMDB, or IMDb id, the plugin looks up that coordinate on the cour and its direct sequels. The card then shows that Simkl series and Simkl’s own episode number. The scrobble sends that cour’s Simkl id with the flat episode number. If the cour list has no TVDB coordinates, the scrobble instead uses the `show` wrapper with the TVDB / TMDB / IMDb id and the filename season and episode, which is how [Simkl maps anime cours](https://api.simkl.org/guides/anime.md).
+
+For sequel seasons that Simkl stores as season 1 of a new series, the overlay can show the filename season (for example `S02E06`) while the scrobble still uses Simkl’s season/episode IDs. A split cour uses Simkl’s episode number (file `S01E12` can be Part 2 episode 1).
 
 ## IntroDB and file chapters
 
@@ -121,7 +123,7 @@ After a file is matched, the plugin reads the **IMDb ID** on that Simkl record a
 GET https://api.introdb.app/segments?imdb_id=tt…&season=…&episode=…
 ```
 
-Season and episode are the numbers shown on the overlay (filename season when that differs from Simkl’s sequel numbering). Movies and matches without an IMDb ID skip the IntroDB request.
+Season and episode are the filename’s TVDB coordinates when those differ from Simkl’s cour numbering, and otherwise the numbers shown on the overlay. Movies and matches without an IMDb ID skip the IntroDB request.
 
 If IntroDB has no times for the episode (or there is no IMDb ID), the plugin reads **chapters in the playing file** and treats OP / Opening / Intro as intro, ED / Ending / Credits as outro, Recap / Previously as recap, and Preview / Next Episode as preview. Story chapters such as Prologue, Part A, and Part B are left alone. The sidebar lists those ranges and notes that they came from file chapters.
 

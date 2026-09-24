@@ -1186,9 +1186,9 @@ async function identifyFile(filePath, options) {
       cached = null;
     }
     if (cached && cached.matched && isTrustedMatch(cached)) {
-      if (!hasCatalogFields(cached)) {
-        cached = await enrichMatch(cached);
-        rememberMatch(filename, path, cached);
+      if (!hasCatalogFields(cached)) cached = await enrichMatch(cached);
+      if (!hasCatalogFields(cached) || needsCourAlignment(cached)) {
+        cached = await publishMatch(filename, path, cached);
       }
       log("Match cache hit for " + filename + " -> " + media.mediaLabel(cached, "english"));
       return cached;
@@ -1199,10 +1199,8 @@ async function identifyFile(filePath, options) {
     }
     var showCached = cachedShowMatch(path, filename);
     if (showCached && isTrustedMatch(showCached)) {
-      if (!hasCatalogFields(showCached)) {
-        showCached = await enrichMatch(showCached);
-      }
-      rememberMatch(filename, path, showCached);
+      if (!hasCatalogFields(showCached)) showCached = await enrichMatch(showCached);
+      showCached = await publishMatch(filename, path, showCached);
       log("Show cache hit for " + filename + " -> " + media.mediaLabel(showCached, "english"));
       return showCached;
     }
@@ -1215,7 +1213,7 @@ async function identifyFile(filePath, options) {
     if (match && media.readSimklId(match.ids)) {
       match = await enrichMatch(match);
       if (isTrustedMatch(match)) {
-        rememberMatch(filename, path, match);
+        match = await publishMatch(filename, path, match);
         log("Identified " + filename + " by external ID as " + media.mediaLabel(match));
         return match;
       }
@@ -1240,7 +1238,7 @@ async function identifyFile(filePath, options) {
     if (isTrustedMatch(match)) {
       match = await enrichMatch(match);
       if (isTrustedMatch(match)) {
-        rememberMatch(filename, path, match);
+        match = await publishMatch(filename, path, match);
         log("Identified " + filename + " as " + media.mediaLabel(match));
         return match;
       }
@@ -1253,7 +1251,7 @@ async function identifyFile(filePath, options) {
     if (match && match.matched && isTrustedMatch(match)) {
       match = await enrichMatch(match);
       if (isTrustedMatch(match)) {
-        rememberMatch(filename, path, match);
+        match = await publishMatch(filename, path, match);
         log("Identified " + filename + " by title search as " + media.mediaLabel(match));
         return match;
       }
@@ -1312,7 +1310,7 @@ async function enrichMatch(match) {
   }
 
   match = media.applyTitleFallback(match, match.filename);
-  return followAnimeSequel(match);
+  return match;
 }
 
 function mappedTvdbSeasons(body) {
@@ -1347,11 +1345,21 @@ function isTvAnimeRelation(rel) {
   return !at || at === "tv" || at === "ona" || at === "anime";
 }
 
-function isSequelRelation(rel) {
-  var t = String((rel && (rel.relation_type || rel.relation)) || "")
+function relationType(rel) {
+  return String((rel && (rel.relation_type || rel.relation)) || "")
     .toLowerCase()
-    .replace(/[_-]+/g, " ");
-  return t === "sequel";
+    .replace(/[_-]+/g, " ")
+    .trim();
+}
+
+function isSequelRelation(rel) {
+  return relationType(rel) === "sequel";
+}
+
+function isPreviousCourRelation(rel) {
+  var type = relationType(rel);
+  if (type === "prequel") return true;
+  return /^season\s+\d+$/.test(type);
 }
 
 function pickDirectSequel(body) {
@@ -1371,9 +1379,35 @@ function pickDirectSequel(body) {
   return direct || fallback;
 }
 
+function pickDirectPrevious(body) {
+  var rels = listAnimeRelations(body);
+  var seasonLink = null;
+  for (var i = 0; i < rels.length; i += 1) {
+    var rel = rels[i];
+    if (!isPreviousCourRelation(rel) || !isTvAnimeRelation(rel)) continue;
+    if (!media.readSimklId(rel.ids)) continue;
+    if (rel.is_direct !== true && rel.is_direct !== "true") continue;
+    if (relationType(rel) === "prequel") return rel;
+    if (!seasonLink) seasonLink = rel;
+  }
+  return seasonLink;
+}
+
 async function fetchAnimeDetail(id) {
+  if (!runtime.animeDetailCache) runtime.animeDetailCache = {};
+  if (runtime.animeDetailCache[id]) return runtime.animeDetailCache[id];
   var response = await authedRequest("GET", "/anime/" + id);
   if (response.statusCode >= 400 || !response.body || media.isEmptyMatch(response.body)) return null;
+  runtime.animeDetailCache[id] = response.body;
+  return response.body;
+}
+
+async function fetchAnimeEpisodes(id) {
+  if (!runtime.animeEpisodeCache) runtime.animeEpisodeCache = {};
+  if (runtime.animeEpisodeCache[id]) return runtime.animeEpisodeCache[id];
+  var response = await authedRequest("GET", "/anime/episodes/" + id);
+  if (response.statusCode >= 400 || !Array.isArray(response.body)) return null;
+  runtime.animeEpisodeCache[id] = response.body;
   return response.body;
 }
 
@@ -1449,6 +1483,136 @@ async function followAnimeSequel(match) {
   return match;
 }
 
+function courHint(match) {
+  return media.parseEpisodeHint((match && match.filename) || "");
+}
+
+function needsCourAlignment(match) {
+  if (!match || !match.matched || match.kind !== "anime" || media.isAnimeMovie(match)) return false;
+  if (match.courChecked) return false;
+  var hint = courHint(match);
+  return !!(hint && hint.explicitSeason && hint.number);
+}
+
+function markCourChecked(match) {
+  return media.createMedia(Object.assign({}, match, { courChecked: true, courResolved: false }));
+}
+
+async function searchCourChain(start, hint, seen) {
+  var current = start;
+  var hops = 0;
+  while (current && hops < 8) {
+    var id = media.readSimklId(current.ids);
+    if (!id || seen[id]) return { found: null };
+    var episodes;
+    try {
+      episodes = await fetchAnimeEpisodes(id);
+    } catch (error) {
+      return { found: null, unavailable: true, error: error };
+    }
+    if (!episodes) return { found: null, unavailable: true };
+    if (hops === 0 && !media.episodesHaveTvdb(episodes)) {
+      seen[id] = { show: current, noTvdb: true };
+      return { noTvdb: true, found: null };
+    }
+    var hit = media.animeEpisodeForTvdb(episodes, hint.season, hint.number);
+    if (hit) {
+      seen[id] = { show: current };
+      return { found: { show: current, episode: hit, id: id } };
+    }
+    var body;
+    try {
+      body = await fetchAnimeDetail(id);
+    } catch (error) {
+      return { found: null, unavailable: true, error: error };
+    }
+    seen[id] = { show: current, body: body };
+    if (!body) return { found: null, unavailable: true };
+    var sequel = pickDirectSequel(body);
+    if (!sequel) return { found: null };
+    current = media.mediaFromSearchResult(sequel, start.filename, hint, {
+      trusted: true,
+      source: "anime-sequel",
+    });
+    hops += 1;
+  }
+  return { found: null };
+}
+
+async function finishCourHit(found, hint, filename) {
+  var show = found.show;
+  var body = found.body;
+  if (!body) {
+    try {
+      body = await fetchAnimeDetail(found.id);
+    } catch (_error) {
+      body = null;
+    }
+  }
+  if (body) show = applyAnimeDetail(show, body, filename);
+  var next = media.applyAnimeTvdbEpisode(show, found.episode, hint);
+  var moved =
+    media.readSimklId(next.ids) !== media.readSimklId(found.show.ids) ||
+    Number(next.number) !== Number(hint.number);
+  if (moved) {
+    log(
+      "Mapped S" +
+        media.pad2(hint.season) +
+        "E" +
+        media.pad2(hint.number) +
+        " to " +
+        media.mediaLabel(next)
+    );
+  }
+  return next;
+}
+
+async function alignAnimeCour(match) {
+  if (!needsCourAlignment(match)) return match;
+  var hint = courHint(match);
+  var seen = {};
+  var chain = await searchCourChain(match, hint, seen);
+  if (chain.unavailable) return match;
+  if (chain.noTvdb) return markCourChecked(await followAnimeSequel(match));
+  if (chain.found) return finishCourHit(chain.found, hint, match.filename);
+
+  var startId = media.readSimklId(match.ids);
+  var startSeen = startId && seen[startId];
+  var startBody = startSeen && startSeen.body;
+  if (!startBody && startId) {
+    try {
+      startBody = await fetchAnimeDetail(startId);
+    } catch (_error) {
+      return match;
+    }
+  }
+  var previous = startBody && pickDirectPrevious(startBody);
+  if (previous && !seen[media.readSimklId(previous.ids)]) {
+    var prevMatch = media.mediaFromSearchResult(previous, match.filename, hint, {
+      trusted: true,
+      source: "anime-sequel",
+    });
+    var backward = await searchCourChain(prevMatch, hint, seen);
+    if (backward.unavailable) return match;
+    if (backward.found) return finishCourHit(backward.found, hint, match.filename);
+  }
+  return markCourChecked(match);
+}
+
+async function publishMatch(filename, path, match) {
+  var next = match;
+  if (needsCourAlignment(match)) {
+    try {
+      next = await alignAnimeCour(match);
+    } catch (error) {
+      log("Anime cour lookup failed: " + (error && error.message ? error.message : error));
+      next = match;
+    }
+  }
+  if (next && isTrustedMatch(next)) rememberMatch(filename, path, next);
+  return next || match;
+}
+
 async function searchCatalog(query, types, limit) {
   var trimmed = String(query || "").trim();
   if (!trimmed) return [];
@@ -1509,7 +1673,7 @@ async function searchCorrectionCandidates(current, query, limit, language) {
     .slice(0, 12);
 }
 
-function applyMatchOverride(filename, path, chosen) {
+async function applyMatchOverride(filename, path, chosen) {
   if (!chosen || !chosen.matched) {
     throw new Error("A valid Simkl match is required.");
   }
@@ -1518,8 +1682,15 @@ function applyMatchOverride(filename, path, chosen) {
       filename: filename || chosen.filename,
       source: "manual",
       trusted: true,
+      courChecked: false,
+      courResolved: false,
     })
   );
+  try {
+    next = await alignAnimeCour(next);
+  } catch (error) {
+    log("Anime cour lookup failed: " + (error && error.message ? error.message : error));
+  }
   rememberMatch(next.filename, path, next);
   return next;
 }

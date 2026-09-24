@@ -75,6 +75,8 @@ var overlayNoticeTimer = null;
 var lastAuthActionNonce = "";
 var authActionTimer = null;
 var lastSourceSignature = "";
+var lastSourcePath = "";
+var playbackStartInFlight = null;
 var seeking = false;
 var seekSettleTimer = null;
 var pollTimer = null;
@@ -1409,8 +1411,8 @@ async function loadSkipIntro(match) {
     fallbackStatus = "no-imdb";
     log("No IMDb ID on Simkl match; trying file chapters for Skip Intro");
   } else if (wantIntrodb) {
-    var season = media.displaySeason(match);
-    var episode = media.displayNumber(match);
+    var season = match.fileSeason || media.displaySeason(match);
+    var episode = match.fileNumber || media.displayNumber(match);
     try {
       var segments = await introdb.fetchSegments({
         imdbId: imdbId,
@@ -1647,6 +1649,36 @@ async function waitForReliableProgress() {
     return null;
   }
   return percent;
+}
+
+function needsPlaybackStart() {
+  if (!pluginAlive || windowClosing || mpvUnavailable || current.identifying) return false;
+  if (!current.media || !current.media.matched) return false;
+  if (!current.path || current.path !== currentPath()) return false;
+  if (scrobbleClosedForCurrent()) return false;
+  try {
+    if (core.status.idle || playbackIsPaused()) return false;
+  } catch (_error) {
+    return false;
+  }
+  if (watchingSessionOpen()) return false;
+  if (playbackSession && playbackSession.pendingAction) return false;
+  return true;
+}
+
+function ensurePlaybackStart(reason) {
+  if (!needsPlaybackStart()) return Promise.resolve();
+  if (playbackStartInFlight) return playbackStartInFlight;
+  playbackStartInFlight = syncPlaybackToSimkl(reason).then(
+    function () {
+      playbackStartInFlight = null;
+    },
+    function (error) {
+      playbackStartInFlight = null;
+      log("Playback start failed: " + errStr(error));
+    }
+  );
+  return playbackStartInFlight;
 }
 
 async function syncPlaybackToSimkl(reason) {
@@ -2178,6 +2210,9 @@ function startPlaybackPoll() {
     syncCurrentPlayback("poll").catch(function (error) {
       log("playback poll failed: " + errStr(error));
     });
+    ensurePlaybackStart("poll").catch(function (error) {
+      log("playback start failed: " + errStr(error));
+    });
     pollTimer = setTimeout(tick, 500);
   }
   pollTimer = setTimeout(tick, 400);
@@ -2537,12 +2572,14 @@ async function identifyCurrentFile() {
       hideNowPlayingOverlay();
       return match;
     }
-    setScrobbleStatus({
-      status: "ready",
-      mediaLabel: labelFor(match),
-      detail: "Watching for playback changes.",
-      reason: "",
-    });
+    if (!watchingSessionOpen()) {
+      setScrobbleStatus({
+        status: "ready",
+        mediaLabel: labelFor(match),
+        detail: "Watching for playback changes.",
+        reason: "",
+      });
+    }
     debugOsd("Matched " + labelFor(match));
     showNowPlayingOverlay(match);
     loadSkipIntro(match).catch(function (error) {
@@ -2566,19 +2603,22 @@ async function identifyCurrentFile() {
 }
 
 async function handleNewFile() {
+  var path = currentPath();
   var signature = sourceSignature();
   var previousProgress = currentProgress();
-  var fileChanged = !!(lastSourceSignature && lastSourceSignature !== signature);
-  if (fileChanged) {
+  // file-started runs before file-loaded. The title often shows up on the second
+  // event for the same path; that is not a new file and must not stop the session.
+  var pathChanged = !!(lastSourcePath && path && lastSourcePath !== path);
+  if (!pathChanged && lastSourceSignature && signature !== lastSourceSignature && path && path === lastSourcePath) {
+    log("Title updated for the current file; keeping the Simkl session");
+  }
+  if (pathChanged) {
     if (isPlaybackCompleteProgress(previousProgress)) {
       await markPlaybackComplete("file-change");
     } else {
       await flushStop("file-change", { progress: previousProgress });
     }
     clearStoppedScrobbleLock();
-  }
-  lastSourceSignature = signature;
-  if (fileChanged || !playbackSession || !playbackSession.itemKey) {
     trustedDuration = 0;
     lastPlaybackTimes = { position: 0, duration: 0, percent: 0, paused: false };
     watchStartedAt = 0;
@@ -2587,8 +2627,22 @@ async function handleNewFile() {
     lastOverlayKey = "";
     resetSkipIntro();
   }
-  if (current.identifying && current.path === currentPath()) return;
+  lastSourceSignature = signature;
+  if (path) lastSourcePath = path;
+  if (
+    !pathChanged &&
+    path &&
+    current.media &&
+    current.media.matched &&
+    current.path === path &&
+    !current.identifying
+  ) {
+    await ensurePlaybackStart("file-loaded");
+    return;
+  }
+  if (current.identifying && current.path === path) return;
   await identifyCurrentFile();
+  await ensurePlaybackStart("identified");
 }
 
 async function handlePlaybackStarted() {
@@ -2600,7 +2654,7 @@ async function handlePlaybackStarted() {
   var match = current.media;
   if (!match || !match.matched) return;
   if (scrobbleClosedForCurrent()) return;
-  await syncPlaybackToSimkl("playback-started");
+  await ensurePlaybackStart("playback-started");
 }
 
 function noteSeeking() {
@@ -2825,7 +2879,7 @@ async function applyCorrection(key) {
   correction = Object.assign({}, correction, { busy: true, error: "" });
   queueSidebarRefresh(false);
   try {
-    var next = simkl.applyMatchOverride(current.filename, current.path, chosen.media);
+    var next = await simkl.applyMatchOverride(current.filename, current.path, chosen.media);
     current.media = next;
     current.identifiedAt = new Date().toISOString();
     correction = createCorrectionState();

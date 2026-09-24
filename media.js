@@ -442,6 +442,8 @@ function applyEpisodeFromFilename(match, filename) {
     values.number = hint.number;
     values.fileSeason = hint.season;
     values.fileNumber = hint.number;
+    values.courChecked = false;
+    values.courResolved = false;
   }
   return applyTitleFallback(createMedia(values), name);
 }
@@ -455,6 +457,7 @@ function parseEpisodeHint(name) {
     return {
       season: Number(seasonEpisode[1]),
       number: Number(seasonEpisode[2]),
+      explicitSeason: true,
     };
   }
 
@@ -463,6 +466,7 @@ function parseEpisodeHint(name) {
     return {
       season: Number(xNotation[1]),
       number: Number(xNotation[2]),
+      explicitSeason: true,
     };
   }
 
@@ -471,6 +475,7 @@ function parseEpisodeHint(name) {
     return {
       season: 1,
       number: Number(episodeOnly[1]),
+      explicitSeason: false,
     };
   }
 
@@ -556,6 +561,72 @@ function copyTitleYear(block) {
   if (block && block.year) item.year = Math.floor(toNumber(block.year, 0)) || undefined;
   item.ids = sanitizeIds(block && block.ids);
   return item;
+}
+
+function episodesHaveTvdb(episodes) {
+  if (!Array.isArray(episodes)) return false;
+  for (var i = 0; i < episodes.length; i += 1) {
+    var episode = episodes[i];
+    if (!episode || String(episode.type || "") === "special") continue;
+    var tvdb = episode.tvdb;
+    if (tvdb && tvdb.season != null && tvdb.episode != null) return true;
+  }
+  return false;
+}
+
+function animeEpisodeForTvdb(episodes, season, number) {
+  if (!Array.isArray(episodes)) return null;
+  var seasonN = Math.floor(toNumber(season, NaN));
+  var numberN = Math.floor(toNumber(number, NaN));
+  if (!isFinite(seasonN) || seasonN < 0 || !isFinite(numberN) || numberN < 1) return null;
+  for (var i = 0; i < episodes.length; i += 1) {
+    var episode = episodes[i];
+    if (!episode || String(episode.type || "episode") === "special") continue;
+    var tvdb = episode.tvdb;
+    if (!tvdb || tvdb.season == null || tvdb.episode == null) continue;
+    if (Math.floor(toNumber(tvdb.season, -1)) !== seasonN) continue;
+    if (Math.floor(toNumber(tvdb.episode, -1)) !== numberN) continue;
+    if (Math.floor(toNumber(episode.episode, 0)) < 1) continue;
+    return episode;
+  }
+  return null;
+}
+
+function applyAnimeTvdbEpisode(match, episode, hint) {
+  if (!match || !episode) return match;
+  var flat = Math.floor(toNumber(episode.episode, 0));
+  if (flat < 1) return match;
+  var parsed = hint || parseEpisodeHint(match.filename || "");
+  var title = sanitizeEpisodeTitle(cleanTitle(episode.title));
+  return createMedia(
+    Object.assign({}, match, {
+      season: parsed && parsed.season ? parsed.season : match.season,
+      number: flat,
+      fileSeason: parsed && parsed.season ? parsed.season : match.fileSeason,
+      fileNumber: parsed && parsed.number ? parsed.number : match.fileNumber,
+      episodeTitle: title || match.episodeTitle,
+      episodeIds: episode.ids || match.episodeIds || {},
+      courChecked: true,
+      courResolved: true,
+    })
+  );
+}
+
+function westernTvIds(ids) {
+  var source = sanitizeIds(ids);
+  var out = {};
+  if (source.tvdb) out.tvdb = String(source.tvdb);
+  if (source.tmdb) out.tmdb = String(source.tmdb);
+  if (source.imdb) out.imdb = String(source.imdb);
+  return out;
+}
+
+function usesWesternAnimeCoordinates(media) {
+  if (!media || media.kind !== "anime" || isAnimeMovie(media) || media.courResolved) return false;
+  var hint = parseEpisodeHint(media.filename || "");
+  if (!hint || !hint.explicitSeason || !hint.number) return false;
+  var ids = westernTvIds(media.ids);
+  return !!(ids.tvdb || ids.tmdb || ids.imdb);
 }
 
 function scrobbleIds(media) {
@@ -672,6 +743,8 @@ function createMedia(values) {
     catalogTitle: cleanTitle(media.catalogTitle),
     animeType: trim(media.animeType),
     trusted: media.trusted !== false && !isWeakTitle(media.catalogTitle || media.title),
+    courChecked: media.courChecked === true,
+    courResolved: media.courResolved === true,
   };
 }
 
@@ -862,6 +935,19 @@ function scrobblePayload(media, progress) {
     return body;
   }
 
+  if (usesWesternAnimeCoordinates(media)) {
+    var hint = parseEpisodeHint(media.filename || "");
+    var western = copyTitleYear(media);
+    western.ids = westernTvIds(media.ids);
+    if (!Object.keys(western.ids).length || !hint) return null;
+    body.show = western;
+    body.episode = {
+      season: hint.season,
+      number: hint.number,
+    };
+    return body;
+  }
+
   var ids = scrobbleIds(media);
   if (!Object.keys(ids).length) return null;
 
@@ -916,6 +1002,8 @@ function cacheRecord(media) {
     catalogTitle: media.catalogTitle,
     animeType: media.animeType || "",
     trusted: media.trusted !== false,
+    courChecked: media.courChecked === true,
+    courResolved: media.courResolved === true,
     cachedAt: new Date().toISOString(),
   };
 }
@@ -933,7 +1021,10 @@ function mediaFromCache(record, filename) {
 
 module.exports = {
   ANIME_ID_KEYS: ANIME_ID_KEYS,
+  animeEpisodeForTvdb: animeEpisodeForTvdb,
+  applyAnimeTvdbEpisode: applyAnimeTvdbEpisode,
   applyEpisodeFromFilename: applyEpisodeFromFilename,
+  episodesHaveTvdb: episodesHaveTvdb,
   applyTitleFallback: applyTitleFallback,
   cacheRecord: cacheRecord,
   clampProgress: clampProgress,
@@ -981,5 +1072,7 @@ module.exports = {
   readSimklId: readSimklId,
   sanitizeIds: sanitizeIds,
   scrobblePayload: scrobblePayload,
+  usesWesternAnimeCoordinates: usesWesternAnimeCoordinates,
+  westernTvIds: westernTvIds,
   simklItemUrl: simklItemUrl,
 };
