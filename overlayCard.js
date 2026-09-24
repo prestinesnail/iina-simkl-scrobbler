@@ -124,7 +124,7 @@ function overlayCSS(options) {
       ? "min-width: 0; max-width: none; width: auto; "
       : "min-width: 520px; max-width: 74vw; ") +
       "padding: 14px 18px 14px 14px; border-radius: 18px; color: #f6f7fb; overflow: hidden;",
-    "background: rgba(8, 8, 12, 0.84); border: 1px solid rgba(255,255,255,0.12);",
+    "background: rgba(8, 8, 12, 0.58); border: 1px solid rgba(255,255,255,0.12);",
     "box-shadow: 0 22px 60px rgba(0,0,0,0.55); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;",
     "opacity: " + (fading ? "0" : "1") + "; transition: opacity " + fadeSec + "; }",
     ".np.visible.fading { opacity: 0; }",
@@ -132,15 +132,29 @@ function overlayCSS(options) {
     ".np-poster { width: 86px; height: 128px; object-fit: cover; border-radius: 10px; background: #1a2230; flex: 0 0 auto; display: block; }",
     ".np-copy { min-width: 0; flex: 1 1 auto; display: flex; flex-direction: column; justify-content: center; gap: 8px; }",
     ".np-live { display: inline-flex; align-items: center; gap: 7px; padding: 4px 10px 4px 8px; border: 1.5px solid #3ddc6c;",
-    "border-radius: 8px; color: #6ef095; font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }",
+    "border-radius: 8px; color: #6ef095; font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;",
+    "background: rgba(6, 18, 10, 0.82); box-shadow: 0 0 16px rgba(61, 220, 108, 0.65); }",
     '.np-live[data-state="skipped"] { border-color: #5ad0ff; color: #9ae4ff; }',
     ".np-title { margin: 0; font-size: 26px; font-weight: 700; line-height: 1.15; letter-spacing: -0.03em; }",
     ".np-year { color: rgba(255,255,255,0.48); font-size: 15px; }",
-    ".np-ep-pill { display: inline-flex; padding: 3px 8px; border-radius: 6px; border: 1px solid rgba(232, 197, 71, 0.85); color: #f0d36a; font-size: 12px; font-weight: 800; letter-spacing: 0.06em; }",
+    ".np-ep-pill { display: inline-flex; padding: 3px 8px; border-radius: 6px; border: 1px solid rgba(232, 197, 71, 0.85); color: #f0d36a; font-size: 12px; font-weight: 800; letter-spacing: 0.06em; background: rgba(22, 16, 4, 0.84); box-shadow: 0 0 16px rgba(232, 197, 71, 0.7); }",
     ".np-ep { margin: 0; color: rgba(255,255,255,0.78); font-size: 15px; }",
     ".np-percent { font-size: 44px; font-weight: 800; color: rgba(255,255,255,0.82); }",
     ".np-percent-label { font-size: 12px; font-weight: 800; letter-spacing: 0.18em; color: rgba(255,255,255,0.42); }",
     ".np-left { font-size: 13px; font-weight: 800; letter-spacing: 0.12em; }",
+    ".np-meter-clip { position: absolute; left: 0; top: 0; bottom: 0; overflow: hidden; z-index: 3; pointer-events: none; }",
+    ".np-meter-top, .np-meter-track, .np-meter-fill { position: absolute; left: 0; z-index: 3; pointer-events: none; }",
+    ".np-meter-top { top: 0; right: 0; height: 2px; background: linear-gradient(90deg, #c9a44a, #b8923a); box-shadow: 0 0 8px rgba(184, 146, 58, 0.4); }",
+    ".np-meter-track { right: 0; bottom: 0; height: 3px; background: rgba(255,255,255,0.08); }",
+    ".np-meter-fill { bottom: 0; height: 3px; background: linear-gradient(90deg, #e8c547 0%, #3d7cff 14%, #6a5cff 62%, #c26bff 100%); box-shadow: 0 0 12px rgba(120, 90, 255, 0.8); }",
+    ".np-meter-cap { position: absolute; left: 0; top: 0; bottom: 0; width: 40px; z-index: 3; pointer-events: none; box-sizing: border-box; border-radius: 18px 0 0 18px; padding: 2px 0 3px 3px;",
+    "background: linear-gradient(180deg, #c9a44a 0%, #b89048 22%, #a07aaa 52%, #6a52c4 78%, #8f5cc4 100%);",
+    "-webkit-mask-image: linear-gradient(#000, #000), linear-gradient(#000, #000); -webkit-mask-clip: content-box, border-box; -webkit-mask-composite: xor;",
+    "mask-image: linear-gradient(#000, #000), linear-gradient(#000, #000); mask-clip: content-box, border-box; mask-composite: exclude; }",
+    ".np-mosaic-clip { position: absolute; left: 0; top: 0; bottom: 0; z-index: 0; overflow: hidden; pointer-events: none; opacity: 0.28; }",
+    ".np-mosaic { position: absolute; top: -28%; bottom: -28%; left: -6%; filter: blur(64px) saturate(1.05); }",
+    ".np-mosaic-cell { position: absolute; width: 30%; height: 46%; border-radius: 50%; }",
+    ".np-progress-edge { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; z-index: 1; pointer-events: none; background: rgba(168, 120, 255, 0.72); box-shadow: 0 0 8px rgba(122, 92, 255, 0.45); }",
     ".skip { position: absolute; " + skipPos.join(" ") + " z-index: 3; pointer-events: auto; appearance: none; cursor: pointer;",
     "display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px 8px 12px; border-radius: 8px;",
     "border: 1.5px solid #e8c547; color: #f0d36a; background: rgba(18, 14, 6, 0.82);",
@@ -243,6 +257,12 @@ function nowPlayingHTML(payload) {
   var progress = Math.max(0, Math.min(100, Math.round(Number(data.progress || 0))));
   var parts = ['<div class="np" data-clickable>'];
   parts.push('<div class="np-bg"></div><div class="np-wash"></div>');
+  parts.push('<div class="np-progress-edge" style="left:' + progress + '%"></div>');
+  parts.push('<div class="np-meter-track"></div>');
+  parts.push('<div class="np-meter-clip" style="width:' + progress + '%">');
+  parts.push('<div class="np-meter-cap"></div>');
+  parts.push('<div class="np-meter-top"></div>');
+  parts.push('<div class="np-meter-fill"></div></div>');
   parts.push('<img class="np-poster" src="' + poster + '" alt="">');
   parts.push('<div class="np-copy">');
   parts.push('<div class="np-live-row">');

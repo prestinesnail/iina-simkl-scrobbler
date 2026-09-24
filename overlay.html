@@ -32,7 +32,7 @@
       padding: 14px 18px 14px 14px;
       border-radius: 18px;
       color: #f6f7fb;
-      background: rgba(8, 8, 12, 0.84);
+      background: rgba(8, 8, 12, 0.58);
       border: 1px solid rgba(255,255,255,0.12);
       box-shadow: 0 22px 60px rgba(0,0,0,0.55);
       overflow: hidden;
@@ -113,15 +113,61 @@
       opacity: 0.38;
       pointer-events: none;
     }
+    .np-mosaic-clip {
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 0;
+      z-index: 0;
+      overflow: hidden;
+      pointer-events: none;
+      opacity: 0.28;
+      transition: width 0.5s linear;
+    }
+    .np-mosaic-clip::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: rgba(168, 124, 36, 0.42);
+      pointer-events: none;
+    }
+    .np-mosaic {
+      position: absolute;
+      top: -28%;
+      bottom: -28%;
+      left: -6%;
+      filter: blur(64px) saturate(1.05);
+      pointer-events: none;
+    }
+    .np-mosaic-cell {
+      position: absolute;
+      width: 30%;
+      height: 46%;
+      border-radius: 50%;
+    }
     .np-wash {
       position: absolute;
       inset: 0;
-      background: linear-gradient(90deg, rgba(8,8,12,0.94) 0%, rgba(8,8,12,0.78) 42%, rgba(8,8,12,0.42) 100%);
+      background: linear-gradient(90deg, rgba(8,8,12,0.62) 0%, rgba(8,8,12,0.46) 42%, rgba(8,8,12,0.24) 100%);
       pointer-events: none;
+    }
+    .np-progress-edge {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      margin-left: -1px;
+      z-index: 1;
+      pointer-events: none;
+      background: rgba(168, 120, 255, 0.72);
+      box-shadow: 0 0 8px rgba(122, 92, 255, 0.45);
+      opacity: 0;
+      transition: left 0.5s linear, opacity 0.2s linear;
     }
     .np-poster {
       position: relative;
-      z-index: 1;
+      z-index: 2;
       width: 86px;
       height: 128px;
       object-fit: cover;
@@ -133,7 +179,7 @@
     }
     .np-copy {
       position: relative;
-      z-index: 1;
+      z-index: 2;
       min-width: 0;
       flex: 1 1 auto;
       display: flex;
@@ -160,7 +206,9 @@
       font-weight: 800;
       letter-spacing: 0.08em;
       text-transform: uppercase;
-      background: rgba(61, 220, 108, 0.08);
+      background: rgba(6, 18, 10, 0.82);
+      box-shadow: 0 0 16px rgba(61, 220, 108, 0.65), inset 0 0 10px rgba(61, 220, 108, 0.22);
+      text-shadow: 0 0 8px rgba(110, 240, 149, 0.75);
       flex: 0 0 auto;
     }
     .np-live[hidden] { display: none !important; }
@@ -169,30 +217,36 @@
       height: 7px;
       border-radius: 50%;
       background: #3ddc6c;
-      box-shadow: 0 0 8px rgba(61, 220, 108, 0.9);
+      box-shadow: 0 0 10px rgba(61, 220, 108, 1);
     }
     .np-live[data-state="waiting"],
     .np-live[data-state="sending"] {
       border-color: #ffc14d;
-      color: #ffd27a;
-      background: rgba(255, 193, 77, 0.1);
+      color: #ffe3a3;
+      background: rgba(28, 18, 4, 0.84);
+      box-shadow: 0 0 16px rgba(255, 193, 77, 0.7), inset 0 0 10px rgba(255, 193, 77, 0.22);
+      text-shadow: 0 0 8px rgba(255, 210, 122, 0.8);
     }
     .np-live[data-state="waiting"] .np-live-dot,
-    .np-live[data-state="sending"] .np-live-dot { background: #ffc14d; box-shadow: 0 0 8px rgba(255, 193, 77, 0.9); }
+    .np-live[data-state="sending"] .np-live-dot { background: #ffc14d; box-shadow: 0 0 10px rgba(255, 193, 77, 1); }
     .np-live[data-state="paused"],
     .np-live[data-state="stopped"] {
-      border-color: #8ea0b8;
-      color: #c5d0dc;
-      background: rgba(142, 160, 184, 0.1);
+      border-color: #c5d4e6;
+      color: #e7eef6;
+      background: rgba(12, 16, 24, 0.84);
+      box-shadow: 0 0 16px rgba(180, 198, 220, 0.55), inset 0 0 10px rgba(180, 198, 220, 0.18);
+      text-shadow: 0 0 8px rgba(210, 222, 236, 0.7);
     }
     .np-live[data-state="paused"] .np-live-dot,
-    .np-live[data-state="stopped"] .np-live-dot { background: #8ea0b8; box-shadow: none; }
+    .np-live[data-state="stopped"] .np-live-dot { background: #d5e0ec; box-shadow: 0 0 10px rgba(210, 222, 236, 0.95); }
     .np-live[data-state="error"] {
-      border-color: #ff6b63;
-      color: #ff8b85;
-      background: rgba(255, 107, 99, 0.1);
+      border-color: #ff8b85;
+      color: #ffc2bd;
+      background: rgba(28, 8, 8, 0.84);
+      box-shadow: 0 0 16px rgba(255, 107, 99, 0.65), inset 0 0 10px rgba(255, 107, 99, 0.2);
+      text-shadow: 0 0 8px rgba(255, 140, 132, 0.75);
     }
-    .np-live[data-state="error"] .np-live-dot { background: #ff6b63; box-shadow: none; }
+    .np-live[data-state="error"] .np-live-dot { background: #ff8b85; box-shadow: 0 0 10px rgba(255, 107, 99, 1); }
     .np-live[data-state="off"] {
       border-color: #8b8b8f;
       color: #c8c8cc;
@@ -202,7 +256,9 @@
     .np-live[data-state="skipped"] {
       border-color: #5ad0ff;
       color: #9ae4ff;
-      background: rgba(90, 208, 255, 0.12);
+      background: rgba(6, 16, 24, 0.84);
+      box-shadow: 0 0 16px rgba(90, 208, 255, 0.65), inset 0 0 10px rgba(90, 208, 255, 0.2);
+      text-shadow: 0 0 8px rgba(154, 228, 255, 0.75);
     }
     .np-live[data-state="skipped"] .np-live-dot { background: #5ad0ff; box-shadow: 0 0 8px rgba(90, 208, 255, 0.9); }
     .np-started {
@@ -255,7 +311,9 @@
       font-weight: 800;
       letter-spacing: 0.06em;
       flex: 0 0 auto;
-      background: rgba(232, 197, 71, 0.08);
+      background: rgba(22, 16, 4, 0.84);
+      box-shadow: 0 0 16px rgba(232, 197, 71, 0.7), inset 0 0 10px rgba(232, 197, 71, 0.22);
+      text-shadow: 0 0 8px rgba(240, 211, 106, 0.8);
     }
     .np-ep-pill[hidden] { display: none !important; }
     .np-ep {
@@ -269,7 +327,7 @@
     }
     .np-stats {
       position: relative;
-      z-index: 1;
+      z-index: 2;
       flex: 0 0 auto;
       display: flex;
       flex-direction: column;
@@ -300,6 +358,64 @@
       font-weight: 800;
       letter-spacing: 0.12em;
       color: rgba(255,255,255,0.72);
+    }
+    .np-meter-clip {
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 0;
+      z-index: 3;
+      overflow: hidden;
+      pointer-events: none;
+      transition: width 0.5s linear;
+    }
+    .np-meter-top,
+    .np-meter-track,
+    .np-meter-fill {
+      position: absolute;
+      left: 0;
+      z-index: 3;
+      pointer-events: none;
+    }
+    .np-meter-top {
+      top: 0;
+      right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, #c9a44a 0%, #b8923a 100%);
+      box-shadow: 0 0 8px rgba(184, 146, 58, 0.4);
+    }
+    .np-meter-track {
+      right: 0;
+      bottom: 0;
+      height: 3px;
+      background: rgba(255,255,255,0.08);
+    }
+    .np-meter-fill {
+      right: 0;
+      bottom: 0;
+      height: 3px;
+      background: linear-gradient(90deg, #e8c547 0%, #3d7cff 14%, #6a5cff 62%, #c26bff 100%);
+      box-shadow: 0 0 12px rgba(120, 90, 255, 0.8);
+    }
+    .np-meter-cap {
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 40px;
+      z-index: 3;
+      pointer-events: none;
+      box-sizing: border-box;
+      border-radius: 18px 0 0 18px;
+      padding: 2px 0 3px 3px;
+      background: linear-gradient(180deg, #c9a44a 0%, #b89048 22%, #a07aaa 52%, #6a52c4 78%, #8f5cc4 100%);
+      -webkit-mask-image: linear-gradient(#000, #000), linear-gradient(#000, #000);
+      -webkit-mask-clip: content-box, border-box;
+      -webkit-mask-composite: xor;
+      mask-image: linear-gradient(#000, #000), linear-gradient(#000, #000);
+      mask-clip: content-box, border-box;
+      mask-composite: exclude;
     }
     #skip-wrap {
       position: absolute;
@@ -387,6 +503,7 @@
   <div id="np" class="np" data-clickable>
     <div id="np-bg" class="np-bg"></div>
     <div class="np-wash"></div>
+    <div id="np-mosaic-clip" class="np-mosaic-clip"><div id="np-mosaic" class="np-mosaic"></div></div>
     <img id="np-poster" class="np-poster" alt="">
     <div class="np-copy">
       <div class="np-live-row">
@@ -410,6 +527,13 @@
       <div class="np-percent-label">WATCHED</div>
       <div id="np-left" class="np-left"></div>
     </div>
+    <div id="np-progress-edge" class="np-progress-edge"></div>
+    <div class="np-meter-track"></div>
+    <div id="np-meter-clip" class="np-meter-clip">
+      <div id="np-meter-cap" class="np-meter-cap"></div>
+      <div id="np-meter-top" class="np-meter-top"></div>
+      <div id="np-meter-fill" class="np-meter-fill"></div>
+    </div>
   </div>
   <div id="skip-wrap" data-clickable>
     <button id="skip" type="button" data-clickable>
@@ -432,6 +556,11 @@
       var episode = document.getElementById("np-ep");
       var percent = document.getElementById("np-percent");
       var left = document.getElementById("np-left");
+      var mosaicClip = document.getElementById("np-mosaic-clip");
+      var mosaic = document.getElementById("np-mosaic");
+      var progressEdge = document.getElementById("np-progress-edge");
+      var meterClip = document.getElementById("np-meter-clip");
+      var mosaicUrl = "";
       var skipWrap = document.getElementById("skip-wrap");
       var skip = document.getElementById("skip");
       var skipLabel = document.getElementById("skip-label");
@@ -467,6 +596,75 @@
         if (isFinite(season) && season > 0) return "S" + pad2(season) + "E" + pad2(ep);
         var code = String(payload.episodeCode || "").trim();
         return code || "Ep. " + ep;
+      }
+
+      function mosaicColor(r, g, b) {
+        var avg = (r + g + b) / 3;
+        var sat = 1.12;
+        var next = [r, g, b].map(function (channel) {
+          var value = avg + (channel - avg) * sat;
+          if (avg < 64) value += 26;
+          return Math.max(0, Math.min(255, Math.round(value)));
+        });
+        return "rgb(" + next[0] + "," + next[1] + "," + next[2] + ")";
+      }
+
+      function paintMosaic(url) {
+        if (!mosaic) return;
+        if (!url) {
+          mosaicUrl = "";
+          mosaic.textContent = "";
+          return;
+        }
+        if (url === mosaicUrl) return;
+        mosaicUrl = url;
+        var img = new Image();
+        img.crossOrigin = "anonymous";
+        img.onload = function () {
+          if (url !== mosaicUrl) return;
+          var cols = 8;
+          var rows = 5;
+          var canvas = document.createElement("canvas");
+          canvas.width = cols;
+          canvas.height = rows;
+          var ctx = canvas.getContext("2d");
+          ctx.drawImage(img, 0, 0, cols, rows);
+          var pixels;
+          try {
+            pixels = ctx.getImageData(0, 0, cols, rows).data;
+          } catch (_error) {
+            return;
+          }
+          mosaic.textContent = "";
+          var y;
+          var x;
+          for (y = 0; y < rows; y += 1) {
+            for (x = 0; x < cols; x += 1) {
+              var offset = (y * cols + x) * 4;
+              var cell = document.createElement("div");
+              cell.className = "np-mosaic-cell";
+              cell.style.backgroundColor = mosaicColor(pixels[offset], pixels[offset + 1], pixels[offset + 2]);
+              cell.style.left = ((x + 0.15) / cols * 100 - 8) + "%";
+              cell.style.top = ((y + 0.15) / rows * 100 - 12) + "%";
+              mosaic.appendChild(cell);
+            }
+          }
+          if (np) mosaic.style.width = Math.max(np.clientWidth, 1) + "px";
+        };
+        img.src = url;
+      }
+
+      function setProgressMeter(progress) {
+        var value = Number(progress);
+        if (!isFinite(value) || value < 0) value = 0;
+        if (value > 100) value = 100;
+        var width = value.toFixed(2) + "%";
+        if (mosaic && np) mosaic.style.width = Math.max(np.clientWidth, 1) + "px";
+        if (mosaicClip) mosaicClip.style.width = width;
+        if (meterClip) meterClip.style.width = width;
+        if (!progressEdge) return;
+        progressEdge.style.left = width;
+        progressEdge.style.opacity = value > 0 ? "0.8" : "0";
       }
 
       function clearPeekTimer() {
@@ -546,12 +744,15 @@
           trackWindowHover = false;
           setHoverPad(false);
           setWindowHovered(false);
+          setProgressMeter(0);
+          paintMosaic("");
           return;
         }
         var posterUrl = payload.posterUrl || "https://wsrv.nl/?url=https://simkl.in/poster_no_pic_c.png";
         var safePoster = /^https:\/\/wsrv\.nl\//.test(posterUrl) && !/["')\\\s]/.test(posterUrl) ? posterUrl : "";
         poster.src = safePoster || "https://wsrv.nl/?url=https://simkl.in/poster_no_pic_c.png";
         npBg.style.backgroundImage = safePoster ? 'url("' + safePoster + '")' : "";
+        paintMosaic(safePoster);
         title.textContent = payload.title || "Unknown title";
         if (payload.year) {
           year.hidden = false;
@@ -573,9 +774,13 @@
           episode.textContent = "";
           meta.hidden = true;
         }
-        var progress = Math.max(0, Math.min(100, Math.round(Number(payload.progress || 0))));
+        var rawProgress = Number(payload.progress || 0);
+        if (!isFinite(rawProgress) || rawProgress < 0) rawProgress = 0;
+        if (rawProgress > 100) rawProgress = 100;
+        var progress = Math.round(rawProgress);
         percent.textContent = progress + "%";
         left.textContent = payload.remainingLabel || "";
+        setProgressMeter(rawProgress);
         var chip = scrobble || payload.status || null;
         if (!chip || !chip.label) {
           live.hidden = true;
