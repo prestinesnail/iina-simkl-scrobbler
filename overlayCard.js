@@ -146,7 +146,7 @@ function overlayCSS(options) {
     ".np-meter-top, .np-meter-track, .np-meter-fill { position: absolute; left: 0; z-index: 3; pointer-events: none; }",
     ".np-meter-top { top: 0; right: 0; height: 2px; background: linear-gradient(90deg, #c9a44a, #b8923a); box-shadow: 0 0 8px rgba(184, 146, 58, 0.4); }",
     ".np-meter-track { right: 0; bottom: 0; height: 3px; background: rgba(255,255,255,0.08); }",
-    ".np-meter-fill { bottom: 0; height: 3px; background: linear-gradient(90deg, #e8c547 0%, #3d7cff 14%, #6a5cff 62%, #c26bff 100%); box-shadow: 0 0 12px rgba(120, 90, 255, 0.8); }",
+    ".np-meter-fill { bottom: 0; height: 3px; background: #c26bff; box-shadow: 0 0 12px rgba(120, 90, 255, 0.8); }",
     ".np-meter-cap { position: absolute; left: 0; top: 0; bottom: 0; width: 40px; z-index: 3; pointer-events: none; box-sizing: border-box; border-radius: 18px 0 0 18px; padding: 2px 0 3px 3px;",
     "background: linear-gradient(180deg, #c9a44a 0%, #b89048 22%, #a07aaa 52%, #6a52c4 78%, #8f5cc4 100%);",
     "-webkit-mask-image: linear-gradient(#000, #000), linear-gradient(#000, #000); -webkit-mask-clip: content-box, border-box; -webkit-mask-composite: xor;",
