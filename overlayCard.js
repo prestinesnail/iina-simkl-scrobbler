@@ -126,7 +126,11 @@ function overlayCSS(options) {
       "padding: 14px 18px 14px 14px; border-radius: 18px; color: #f6f7fb; overflow: hidden;",
     "background: rgba(8, 8, 12, 0.58); border: 1px solid rgba(255,255,255,0.12);",
     "box-shadow: 0 22px 60px rgba(0,0,0,0.55); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;",
-    "opacity: " + (fading ? "0" : "1") + "; transition: opacity " + fadeSec + "; }",
+    "opacity: " + (fading ? "0" : "1") + "; transition: opacity " + fadeSec + ", border-color 0.35s ease, box-shadow 0.35s ease; }",
+    '.np[data-state="watched"] { border-color: #3ddc6c;',
+    "box-shadow: 0 0 16px rgba(61, 220, 108, 0.7), 0 0 36px rgba(61, 220, 108, 0.42), 0 22px 60px rgba(0,0,0,0.55); }",
+    '.np[data-state="watched"]::after { content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; z-index: 4; box-sizing: border-box;',
+    "border: 1.5px solid #3ddc6c; box-shadow: inset 0 0 16px rgba(61, 220, 108, 0.32), inset 0 0 40px rgba(61, 220, 108, 0.16); }",
     ".np.visible.fading { opacity: 0; }",
     ".np.visible.fading.peek { opacity: 1; }",
     ".np-poster { width: 86px; height: 128px; object-fit: cover; border-radius: 10px; background: #1a2230; flex: 0 0 auto; display: block; }",
@@ -200,7 +204,7 @@ function scrobbleChip(scrobble) {
   if (status.status === "waiting" || status.status === "sending") {
     return { label: "Updating", state: status.status === "sending" ? "sending" : "waiting" };
   }
-  if (status.status === "succeeded" && status.action === "scrobble") {
+  if ((status.status === "succeeded" || status.status === "duplicate") && status.action === "scrobble") {
     return { label: "Watched", state: "watched" };
   }
   if (status.status === "succeeded" && status.verb === "start") {
@@ -255,7 +259,7 @@ function nowPlayingHTML(payload) {
   var title = escapeHtml(data.title || "Unknown title");
   var chip = scrobbleChip(data.scrobble || data.status);
   var progress = Math.max(0, Math.min(100, Math.round(Number(data.progress || 0))));
-  var parts = ['<div class="np" data-clickable>'];
+  var parts = ['<div class="np"' + (chip.state === "watched" ? ' data-state="watched"' : "") + ' data-clickable>'];
   parts.push('<div class="np-bg"></div><div class="np-wash"></div>');
   parts.push('<div class="np-progress-edge" style="left:' + progress + '%"></div>');
   parts.push('<div class="np-meter-track"></div>');

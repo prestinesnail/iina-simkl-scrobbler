@@ -400,7 +400,7 @@
         if (status.status === "waiting" || status.status === "sending") {
           return { label: "Updating", state: status.status === "sending" ? "sending" : "waiting" };
         }
-        if (status.status === "succeeded" && status.action === "scrobble") return { label: "Watched", state: "watching" };
+        if ((status.status === "succeeded" || status.status === "duplicate") && status.action === "scrobble") return { label: "Watched", state: "watching" };
         if (playback && playback.state === "playing") return { label: "Now Watching", state: "watching" };
         if (playback && playback.state === "paused") return { label: "Paused", state: "paused" };
         if (status.status === "succeeded" && status.verb === "start") return { label: "Now Watching", state: "watching" };

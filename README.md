@@ -78,10 +78,10 @@ Play a movie or episode in IINA. The plugin identifies the file, sends Simkl `st
 | You do this | What happens |
 | --- | --- |
 | Play a matched file | Simkl **Now Watching** starts; overlay appears |
-| Pause | Simkl saves a resume point, unless progress is **85% or higher** — then it sends `stop` at 100% (watched) and stops scrobbling that file |
+| Pause | Simkl saves a resume point, unless progress is **85% or higher** — then it sends `stop` at 100% (watched) and stops scrobbling that file. If the file has an outro, pausing before it does not mark watched |
 | Resume | Simkl starts again at the current progress; overlay shows briefly |
-| Scrub / skip | Local overlay updates immediately. Below 85%, a large seek may send `start` or `pause` after the 20s lock. At **85% or higher**, any seek, skip, pause, stop, or next file sends `stop` at 100% and does not scrobble that file again |
-| Stop, close the window, quit IINA, or play the next file | Simkl `stop`. At **85% or higher**, that stop is 100% (watched) |
+| Scrub / skip | Local overlay updates immediately. Below 85%, a large seek may send `start` or `pause` after the 20s lock. At **85% or higher**, any seek, skip, pause, stop, or next file sends `stop` at 100% and does not scrobble that file again. If the file has an outro, reaching it marks watched immediately, and actions before it do not |
+| Stop, close the window, quit IINA, or play the next file | Simkl `stop`. At **85% or higher**, that stop is 100% (watched). With an outro defined, only once playback has reached it |
 | Let the file end (≥ 95%) | Simkl `stop` at 100% |
 | Hover the player after the overlay fades | Overlay peeks back in |
 | Click the overlay card | Opens the title on Simkl |
@@ -90,7 +90,7 @@ Play a movie or episode in IINA. The plugin identifies the file, sends Simkl `st
 
 If the wrong title is matched, open the sidebar (`⌘K`) and use **Correct match**. **Mark as Watched** in the plugin menu sends `stop` at 100% for the current title.
 
-Simkl marks an item **watched** only on `stop` with progress ≥ 80. This plugin treats any pause, seek, skip, stop, or next-file at **85% or higher** as finished and sends `stop` at 100%. After that it does not scrobble that file again. Watching past 85% with no extra action still waits for a real stop or end.
+Simkl marks an item **watched** only on `stop` with progress ≥ 80. This plugin treats any pause, seek, skip, stop, or next-file at **85% or higher** as finished and sends `stop` at 100%. If IntroDB or the file chapters define an outro, playback is marked watched as soon as the playhead reaches that outro, and actions before it are not. After a watched stop it does not scrobble that file again. With no outro, watching past 85% with no extra action still waits for a real stop or end.
 
 Playback POSTs happen on play, pause, stop, close, natural end, and after a **large seek** once Simkl’s 20-second lock allows — never on a heartbeat timer. Small scrubs still wait for the next pause or stop. A playlist advance is one `stop` for the finished episode, then one `start` for the next — not overlapping lookups or extra 409 stops. Simkl interpolates **Watching now** progress from the item runtime between those events. See [Simkl’s scrobble guide](https://api.simkl.org/guides/scrobble.md).
 

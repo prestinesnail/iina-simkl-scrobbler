@@ -1,5 +1,5 @@
 var API_ROOT = "https://api.introdb.app";
-var USER_AGENT = "iina-simkl-scrobbler/1.1.35";
+var USER_AGENT = "iina-simkl-scrobbler/1.1.36";
 var SKIP_PROMPT_MS = 5000;
 var SKIP_LEAD_IN_SEC = 1.5;
 var MIN_REMAINING_SEC = 2;
